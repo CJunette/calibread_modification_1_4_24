@@ -16,7 +16,7 @@ if __name__ == '__main__':
     # # add density for each reading_data. 已保存新数据（这里的保存是和trim一起完成的，没有单独写），之后直接读取，无需调用。
     # reading_data = UtilFunctions.compute_density_for_reading_data(reading_data)
 
-    # # trim reading data to eliminate error points on left top corner (caused by exp errors). 已保存新数据，之后直接读取，无需调用。
+    # trim reading data to eliminate error points on left top corner (caused by exp errors). 已保存新数据，之后直接读取，无需调用。
     # reading_data_after_transform, reading_data_after_trim, reading_data_after_restore = UtilFunctions.trim_data(reading_data, calibration_data)
     # print("data trimming finished.")
     # # visualize reading after process.
@@ -46,8 +46,8 @@ if __name__ == '__main__':
     # save text_data after adding boundary and penalty.
     # SaveFiles.save_text_data_after_adding_boundary_and_penalty(text_data)
 
-    # text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
-    # reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
+    text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
+    reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
 
     # # visualize the reading data and text.
     # for subject_index in range(0, 19):
