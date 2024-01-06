@@ -89,7 +89,7 @@ def read_calibration_data() -> list:
                 point_y = 272 + 64 * matrix_y
                 calibration_point_list[matrix_y_index][matrix_x_index] = {"point_x": point_x, "point_y": point_y}
 
-        subject_list.append((gaze_list, avg_gaze_list, calibration_point_list))
+        subject_list.append([gaze_list, avg_gaze_list, calibration_point_list])
 
     return subject_list
 

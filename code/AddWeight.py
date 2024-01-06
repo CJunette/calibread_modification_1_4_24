@@ -22,11 +22,12 @@ def add_weight_to_text(text_data):
                 if word.strip() == "":
                     penalty = min(penalty, configs.empty_penalty)
                 # 3. 位置靠近行尾。
-                if df[(df["row"] == row_index) & (df["col"] == col_index + 1)]["word"].tolist()[0] == "blank_supplement":
+                if df[(df["row"] == row_index) & (df["col"] == col_index + 1)]["word"].shape[0] > 0 and df[(df["row"] == row_index) & (df["col"] == col_index + 1)]["word"].tolist()[0] == "blank_supplement":
                     penalty = min(penalty, configs.location_penalty)
                 # 4. 位置靠近行首。
-                if (df[(df["row"] == row_index) & (df["col"] == col_index - 1)]["word"].tolist()[0] == "blank_supplement" or
-                        df[(df["row"] == row_index) & (df["col"] == col_index - 1)]["word"].tolist()[0].strip() == ""):
+                if (df[(df["row"] == row_index) & (df["col"] == col_index - 1)]["word"].shape[0] > 0 and
+                        (df[(df["row"] == row_index) & (df["col"] == col_index - 1)]["word"].tolist()[0] == "blank_supplement" or
+                         df[(df["row"] == row_index) & (df["col"] == col_index - 1)]["word"].tolist()[0].strip() == "")):
                     penalty = min(penalty, configs.location_penalty)
             text_penalty.append(penalty)
         df["penalty"] = text_penalty

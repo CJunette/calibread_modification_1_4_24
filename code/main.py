@@ -36,18 +36,21 @@ if __name__ == '__main__':
     # text_density_info_list = ComputeTextDensity.compute_text_density(reading_data_after_trim, text_data, calibration_data)
     # SaveFiles.save_text_density(text_density_info_list)
 
-    # # 为文本数据添加边界点，并根据边界点计算panelty。
-    # # 这里的数据可能会经常需要做修改（尤其是penalty）。所以虽然保存了，但也可能需要反复调用。
-    # text_data = ReadData.read_text_data("text_sorted_mapping.csv")
-    # # add boundary points to text data.
-    # text_data = UtilFunctions.add_boundary_points_to_text_data(text_data)
-    # # add penalty to text_data。
-    # text_data = AddWeight.add_weight_to_text(text_data)
+    # 为文本数据添加边界点，并根据边界点计算panelty。
+    # 这里的数据可能会经常需要做修改（尤其是penalty）。所以虽然保存了，但也可能需要反复调用。
+    text_data = ReadData.read_text_data("text_sorted_mapping.csv")
+    # add boundary points to text data.
+    text_data = UtilFunctions.add_boundary_points_to_text_data(text_data)
+    # add penalty to text_data。
+    text_data = AddWeight.add_weight_to_text(text_data)
     # save text_data after adding boundary and penalty.
     # SaveFiles.save_text_data_after_adding_boundary_and_penalty(text_data)
 
-    text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
+    # text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
     reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
+
+    # 确认相同label的gaze data在y方向上的分布。
+    # UtilFunctions.check_y_distribution_of_data_given_row_label(reading_data)
 
     # # visualize the reading data and text.
     # for subject_index in range(0, 19):
@@ -64,13 +67,25 @@ if __name__ == '__main__':
 
     # visualize manual calibration data with gradient descent of the whole matrix.
     # gd_whole_avg_distance_list = UtilFunctions.visualize_manual_calibration(ManualCalibrateForStd.compute_std_cali_with_whole_matrix_gradient_descent)
-    # # visualize manual calibration data with homography matrix.
+    # visualize manual calibration data with homography matrix.
     # homo_avg_distance_list = UtilFunctions.visualize_manual_calibration(ManualCalibrateForStd.compute_std_cali_with_homography_matrix)
     # compare the calibration error of whole_matrix_gradient descent and homo.
     # UtilFunctions.compare_manual_calibration_errors(ManualCalibrateForStd.compute_std_cali_with_whole_matrix_gradient_descent, ManualCalibrateForStd.compute_std_cali_with_homography_matrix)
 
+    # # compute the error of 7 point homography calibration.
+    # UtilFunctions.compute_error_for_seven_points_homography()
+
     # 对reading数据，使用梯度下降实现对齐。
-    # for subject_index in range(0, 1):
+    avg_error_list = []
+    for subject_index in range(0, 1):
+        print(subject_index)
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_and_penalty")
+        avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_penalty_and_rowlabel")
+    #     avg_errors.sort()
+    #     print(avg_errors[:5])
+    #     avg_error_list.append(avg_errors[:5])
+    # for subject_index in range(len(avg_error_list)):
+    #     print(avg_error_list[subject_index])
+

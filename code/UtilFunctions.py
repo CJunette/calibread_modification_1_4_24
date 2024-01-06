@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.spatial import cKDTree
 
@@ -19,7 +20,7 @@ def change_2d_vector_to_homogeneous_vector(vector_2d):
 
 def change_homogeneous_vector_to_2d_vector(vector_homogeneous):
     vector_2d = [vector_homogeneous[i] / vector_homogeneous[-1] for i in range(len(vector_homogeneous))]
-    vector_2d = vector_2d[:-1]
+    vector_2d = np.array(vector_2d[:-1])
     return vector_2d
 
 
@@ -249,8 +250,8 @@ def add_boundary_points_to_text_data(text_data):
 
             new_points = []
 
-            left_right_padding = 3
-            up_down_padding = 1
+            left_right_padding = 2
+            up_down_padding = 2
 
             # 如果某一行内本身就存在一些空白点，则将其添加进去。如果没有空白点，则添加首尾的边界点。
             min_col = min(col_list)
@@ -261,9 +262,9 @@ def add_boundary_points_to_text_data(text_data):
             new_points.extend(points)
 
             # 除此之外，额外添加行与行之间、以及文字边缘的点。目前的设计是每一行添加其上方的点。
-            if row_index > 0:
-                points = supplement_bound_points(para_id=para_id, start_col=-left_right_padding, end_col=configs.col_num + left_right_padding, start_row=row_list[row_index], offset_x=0, offset_y=-0.5)
-                new_points.extend(points)
+            # if row_index > 0:
+            #     points = supplement_bound_points(para_id=para_id, start_col=-left_right_padding, end_col=configs.col_num + left_right_padding, start_row=row_list[row_index], offset_x=0, offset_y=-0.5)
+            #     new_points.extend(points)
 
             if row_index == 0:
                 for repeat_index in range(1, up_down_padding+1):
@@ -292,6 +293,39 @@ def add_boundary_points_to_text_data(text_data):
     return text_data
 
 
+def compute_error_for_seven_points_homography():
+    calibration_data = ReadData.read_calibration_data()
+
+    # visualize the manual calibration data after icp calibration.
+    avg_distance_list = []
+    for subject_index in range(0, 19):
+        calibration_gaze_list = calibration_data[subject_index][0]
+        calibration_avg_list = calibration_data[subject_index][1]
+        calibration_point_list = calibration_data[subject_index][2]
+        calibration_data[subject_index][0] = [[calibration_gaze_list[0][0], calibration_gaze_list[0][14], calibration_gaze_list[0][29]],
+                                              [calibration_gaze_list[2][15]],
+                                              [calibration_gaze_list[5][0], calibration_gaze_list[5][14], calibration_gaze_list[5][29]]]
+        calibration_data[subject_index][1] = [[calibration_avg_list[0][0], calibration_avg_list[0][14], calibration_avg_list[0][29]],
+                                              [calibration_avg_list[2][15]],
+                                              [calibration_avg_list[5][0], calibration_avg_list[5][14], calibration_avg_list[5][29]]]
+        calibration_data[subject_index][2] = [[calibration_point_list[0][0], calibration_point_list[0][14], calibration_point_list[0][29]],
+                                              [calibration_point_list[2][15]],
+                                              [calibration_point_list[5][0], calibration_point_list[5][14], calibration_point_list[5][29]]]
+
+        transform_matrix = ManualCalibrateForStd.compute_std_cali_with_homography_matrix(subject_index, calibration_data)
+
+        gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list, \
+            avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list, \
+            calibration_point_list_modified = ManualCalibrateForStd.apply_transform_to_calibration(subject_index, calibration_data, transform_matrix)
+
+        distance_list, avg_distance = ManualCalibrateForStd.compute_distance_between_std_and_correction(avg_gaze_coordinate_after_translation_list, calibration_point_list_modified)
+        print("avg_distance: ", avg_distance)
+        avg_distance_list.append(avg_distance)
+        # Render.visualize_cali_result(gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list,
+        #                              avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list,
+        #                              calibration_point_list_modified)
+
+
 def save_text_density_for_main(reading_data_after_trim, text_data, calibration_data):
     # # compute the text density for each subject and save it.
     text_density_info_list = ComputeTextDensity.compute_text_density(reading_data_after_trim, text_data, calibration_data)
@@ -304,3 +338,32 @@ def update_reading_data_and_save(reading_data, text_data, calibration_data):
 
     reading_data_after_transform, reading_data_after_trim, reading_data_after_restore = UtilFunctions.trim_data(reading_data, calibration_data)
     SaveFiles.save_reading_data_after_modification(reading_data_after_restore, "reading_after_trim")
+
+
+def check_y_distribution_of_data_given_row_label(reading_data):
+    for subject_index in range(len(reading_data)):
+        gaze_data_by_row = [[] for _ in range(configs.row_num)]
+        for text_index in range(len(reading_data[subject_index])):
+            df = reading_data[subject_index][text_index]
+            row_label = df["row_label"].tolist()
+            gaze_y = df["gaze_y"].tolist()
+            for gaze_index in range(len(row_label)):
+                row = row_label[gaze_index]
+                gaze_data_by_row[row].append(gaze_y[gaze_index])
+
+        fig = plt.figure(figsize=(12, 8))
+        ax_list = []
+        for i in range(1, 7):
+            ax = fig.add_subplot(2, 3, i)
+            ax_list.append(ax)
+
+        for row in range(configs.row_num):
+            ax_list[row].hist(gaze_data_by_row[row], bins=100, density=True, alpha=0.75)
+            ax_list[row].set_title(f"row: {row}")
+            ax_list[row].set_ylim(0, 0.2)
+            ax_list[row].set_aspect('auto', adjustable='box')
+            print("gaze point number of given row: ", len(gaze_data_by_row[row]))
+        print()
+
+        plt.show()
+

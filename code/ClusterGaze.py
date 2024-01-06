@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.cluster import KMeans
 import configs
@@ -33,8 +34,19 @@ def compress_gaze_and_cluster(reading_data):
         kmeans = KMeans(n_clusters=configs.row_num, random_state=configs.random_seed).fit(compressed_coordinates)
         labels = kmeans.labels_
 
+        # create label column.
         for text_index in range(len(reading_data[subject_index])):
             reading_data[subject_index][text_index]["row_label"] = [-1 for _ in range(reading_data[subject_index][text_index].shape[0])]
+
+        # 将label按照y的均值大小排序，重新更新一下label。
+        df = pd.DataFrame(compressed_coordinates, columns=['x', 'y'])
+        df['label'] = labels
+        label_group = df.groupby('label')
+        cluster_centers = df.groupby('label')['y'].mean().sort_values().index
+        label_map = {old_label: new_label for new_label, old_label in enumerate(cluster_centers)}
+        # 应用映射关系，更新 label
+        df['new_label'] = df['label'].map(label_map)
+        labels = df['new_label'].values.tolist()
 
         for label_index in range(len(labels)):
             text_index = gaze_info_list[label_index]["text_index"]

@@ -1,3 +1,5 @@
+import multiprocessing
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.collections import LineCollection
@@ -446,7 +448,331 @@ def calibrate_with_location_coverage_and_penalty(subject_index, reading_data, te
     return avg_error_list
 
 
-def calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data, text_data, calibration_data, max_iteration=100, distance_threshold=64, mode="location"):
+def single_process_matching(reading_data, text_data,
+                            text_index, row_index,
+                            filtered_text_data_list,
+                            total_nbrs_list, row_nbrs_list,
+                            actual_text_point_dict, actual_supplement_text_point_dict,
+                            distance_threshold):
+    reading_df = reading_data[text_index]
+    filtered_reading_df = reading_df[reading_df["row_label"] == row_index]
+
+    point_pair_list = []
+    weight_list = []
+    row_label_list = []
+
+    # 如果当前行没有text point或当前reading数据没有一个gaze point被分到了这一行，则对于这里的reading point，需要匹配所有的text point。
+    if row_nbrs_list[text_index][row_index] is None or filtered_reading_df.shape[0] == 0:
+        reading_coordinates = reading_df[["gaze_x", "gaze_y"]].values.tolist()
+        distances, indices = total_nbrs_list[text_index].kneighbors(reading_coordinates)
+        text_coordinate = text_data[text_index][["x", "y"]].values.tolist()
+        for gaze_index in range(len(distances)):
+            if distances[gaze_index][0] < distance_threshold:
+                point_pair_list.append([reading_coordinates[gaze_index], text_coordinate[indices[gaze_index][0]]])
+                weight = text_data[text_index].iloc[indices[gaze_index][0]]["penalty"]
+                weight_list.append(weight)
+                row_label_list.append(-1)
+                x = text_data[text_index].iloc[indices[gaze_index][0]]["x"]
+                y = text_data[text_index].iloc[indices[gaze_index][0]]["y"]
+                if (x, y) in actual_text_point_dict:
+                    actual_text_point_dict[(x, y)] += 1
+                if (x, y) in actual_supplement_text_point_dict:
+                    actual_supplement_text_point_dict[(x, y)] += 1
+    # 如果当前行有text point且当前reading数据至少有一个gaze point被分到了这一行，则对于这里的reading point，只需要匹配当前行的text point。
+    else:
+        filtered_reading_coordinates = filtered_reading_df[["gaze_x", "gaze_y"]].values.tolist()
+        distances, indices = row_nbrs_list[text_index][row_index].kneighbors(filtered_reading_coordinates)
+        filtered_text_data = filtered_text_data_list[text_index][row_index]
+        filtered_text_coordinate = filtered_text_data[["x", "y"]].values.tolist()
+        for gaze_index in range(len(distances)):
+            if distances[gaze_index][0] < distance_threshold:
+                point_pair_list.append([filtered_reading_coordinates[gaze_index], filtered_text_coordinate[indices[gaze_index][0]]])
+                weight = filtered_text_data.iloc[indices[gaze_index][0]]["penalty"]
+                weight_list.append(weight)
+                row_label_list.append(row_index)
+                x = filtered_text_data.iloc[indices[gaze_index][0]]["x"]
+                y = filtered_text_data.iloc[indices[gaze_index][0]]["y"]
+                if (x, y) in actual_text_point_dict:
+                    actual_text_point_dict[(x, y)] += 1
+                if (x, y) in actual_supplement_text_point_dict:
+                    actual_supplement_text_point_dict[(x, y)] += 1
+
+    return point_pair_list, weight_list, row_label_list
+
+
+def calibrate_with_location_coverage_penalty_and_rowlabel(subject_index, reading_data, text_data, calibration_data, max_iteration=100, distance_threshold=64):
+    reading_data = reading_data.copy()
+
+    # 获取1d的gaze point list。
+    total_gaze_point_num = 0
+    gaze_point_list_1d = []
+    for text_index in range(len(reading_data)):
+        coordinates = reading_data[text_index][["gaze_x", "gaze_y"]].values.tolist()
+        gaze_point_list_1d.extend(coordinates)
+        total_gaze_point_num += len(coordinates)
+    gaze_point_list_1d = np.array(gaze_point_list_1d)
+
+    # 用一个dict来记录所有有效的文本点。
+    text_point_dict = {}
+    for row_index in range(len(calibration_data[subject_index][2])):
+        for col_index in range(len(calibration_data[subject_index][2][row_index])):
+            x = calibration_data[subject_index][2][row_index][col_index]["point_x"]
+            y = calibration_data[subject_index][2][row_index][col_index]["point_y"]
+            text_point_dict[(x, y)] = 0
+    for text_index in range(len(text_data)):
+        for index, row in text_data[text_index].iterrows():
+            x = row["x"]
+            y = row["y"]
+            word = row["word"]
+            if word != "blank_supplement" and (x, y) in text_point_dict:
+                text_point_dict[(x, y)] += 1
+    # 用一个dict来记录非blank_supplement，且至少有过一次文字的文本点。
+    effective_text_point_dict = {}
+    for key in text_point_dict:
+        if text_point_dict[key] != 0:
+            effective_text_point_dict[key] = text_point_dict[key]
+    text_point_total_utilized_count = 0
+    for key in effective_text_point_dict:
+        text_point_total_utilized_count += effective_text_point_dict[key]
+    # 用一个dict来记录blank_supplement的文本点。
+    supplement_text_point_dict = {}
+    for text_index in range(len(text_data)):
+        for index, row in text_data[text_index].iterrows():
+            x = row["x"]
+            y = row["y"]
+            word = row["word"]
+            if word == "blank_supplement":
+                supplement_text_point_dict[(x, y)] = 0
+
+    # 按文本、行号来对text point分类，然后据此生成对应的nearest neighbor。
+    row_nbrs_list = [[] for _ in range(len(text_data))]
+    filtered_text_data_list = [[] for _ in range(len(text_data))]
+    for text_index in range(len(text_data)):
+        for row_index in range(configs.row_num):
+            df = text_data[text_index]
+            filtered_text_data_df = df[(df["row"] == float(row_index)) & (df["word"] != "blank_supplement")]
+            filtered_text_data_list[text_index].append(filtered_text_data_df)
+            if filtered_text_data_df.shape[0] > 0:
+                filtered_text_coordinate = filtered_text_data_df[["x", "y"]].values.tolist()
+                nbr = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(filtered_text_coordinate)
+                row_nbrs_list[text_index].append(nbr)
+            else:
+                row_nbrs_list[text_index].append(None)
+
+    # 生成一个所有text_point的nearest neighbor。
+    total_nbrs_list = []
+    for text_index in range(len(text_data)):
+        df = text_data[text_index]
+        text_coordinate = df[["x", "y"]].values.tolist()
+        nbr = NearestNeighbors(n_neighbors=1, algorithm='kd_tree').fit(text_coordinate)
+        total_nbrs_list.append(nbr)
+
+    # 将gaze data和text point先做一个基于重心的对齐。
+    gaze_point_center = np.mean(gaze_point_list_1d, axis=0)
+    text_point_center = np.array([0, 0])
+    for key, value in effective_text_point_dict.items():
+        text_point_center[0] += key[0]
+        text_point_center[1] += key[1]
+    text_point_center[0] /= len(effective_text_point_dict)
+    text_point_center[1] /= len(effective_text_point_dict)
+    translate_vector = np.array(text_point_center - gaze_point_center)
+    gaze_point_list_1d += translate_vector
+    for text_index in range(len(reading_data)):
+        reading_data[text_index]["gaze_x"] += translate_vector[0]
+        reading_data[text_index]["gaze_y"] += translate_vector[1]
+
+    # 把calibration的数据也做一下相同的移动。
+    for row_index in range(len(calibration_data[subject_index][1])):
+        for col_index in range(len(calibration_data[subject_index][1][row_index])):
+            calibration_data[subject_index][1][row_index][col_index]["avg_gaze_x"] += translate_vector[0]
+            calibration_data[subject_index][1][row_index][col_index]["avg_gaze_y"] += translate_vector[1]
+            for point_index in range(len(calibration_data[subject_index][0][row_index][col_index]["gaze_x"])):
+                calibration_data[subject_index][0][row_index][col_index]["gaze_x"][point_index] += translate_vector[0]
+                calibration_data[subject_index][0][row_index][col_index]["gaze_y"][point_index] += translate_vector[1]
+
+    total_transform_matrix = np.eye(3)
+    avg_error_list = []
+    with multiprocessing.Pool(processes=configs.number_of_process) as pool:
+        for iteration_index in range(max_iteration):
+            print("iteration_index: ", iteration_index)
+            # 每次迭代前，创建一个类似effective_text_point_dict的字典，用于记录每个文本点被阅读点覆盖的次数。
+            actual_text_point_dict = effective_text_point_dict.copy()
+            for key in actual_text_point_dict:
+                actual_text_point_dict[key] = 0
+
+            actual_supplement_text_point_dict = supplement_text_point_dict.copy()
+
+            '''
+            # 这里的多线程是负优化。
+            args_list = []
+            for text_index in range(len(reading_data)):
+                for row_index in range(configs.row_num):
+                    args_list.append((reading_data, text_data,
+                                      text_index, row_index,
+                                      filtered_text_data_list,
+                                      total_nbrs_list, row_nbrs_list,
+                                      actual_text_point_dict, actual_supplement_text_point_dict,
+                                      distance_threshold))
+
+            result_list = pool.starmap(single_process_matching, args_list)
+            result_list = np.array(result_list)
+            point_pair_list = result_list[:, 0]
+            point_pair_list = [point_pair for point_pair in point_pair_list if len(point_pair) > 0]
+            point_pair_list = np.concatenate(point_pair_list, axis=0)
+            weight_list = result_list[:, 1]
+            weight_list = [weight for weight in weight_list if len(weight) > 0]
+            weight_list = np.concatenate(weight_list, axis=0)
+            row_label_list = result_list[:, 2]
+            row_label_list = [row_label for row_label in row_label_list if len(row_label) > 0]
+            row_label_list = np.concatenate(row_label_list, axis=0)
+            '''
+
+            t1 = time.time()
+            point_pair_list = []
+            weight_list = []
+            row_label_list = []
+            for text_index in range(len(reading_data)):
+                reading_df = reading_data[text_index]
+                for row_index in range(configs.row_num):
+                    filtered_reading_df = reading_df[reading_df["row_label"] == row_index]
+
+                    # 如果当前行没有text point或当前reading数据没有一个gaze point被分到了这一行，则对于这里的reading point，需要匹配所有的text point。
+                    if row_nbrs_list[text_index][row_index] is None or filtered_reading_df.shape[0] == 0:
+                        reading_coordinates = reading_df[["gaze_x", "gaze_y"]].values.tolist()
+                        distances, indices = total_nbrs_list[text_index].kneighbors(reading_coordinates)
+                        text_coordinate = text_data[text_index][["x", "y"]].values.tolist()
+                        for gaze_index in range(len(distances)):
+                            if distances[gaze_index][0] < distance_threshold:
+                                point_pair_list.append([reading_coordinates[gaze_index], text_coordinate[indices[gaze_index][0]]])
+                                weight = text_data[text_index].iloc[indices[gaze_index][0]]["penalty"]
+                                weight_list.append(weight)
+                                row_label_list.append(-1)
+                                x = text_data[text_index].iloc[indices[gaze_index][0]]["x"]
+                                y = text_data[text_index].iloc[indices[gaze_index][0]]["y"]
+                                if (x, y) in actual_text_point_dict:
+                                    actual_text_point_dict[(x, y)] += 1
+                                if (x, y) in actual_supplement_text_point_dict:
+                                    actual_supplement_text_point_dict[(x, y)] += 1
+                    # 如果当前行有text point且当前reading数据至少有一个gaze point被分到了这一行，则对于这里的reading point，只需要匹配当前行的text point。
+                    else:
+                        filtered_reading_coordinates = filtered_reading_df[["gaze_x", "gaze_y"]].values.tolist()
+                        distances, indices = row_nbrs_list[text_index][row_index].kneighbors(filtered_reading_coordinates)
+                        filtered_text_data = filtered_text_data_list[text_index][row_index]
+                        filtered_text_coordinate = filtered_text_data[["x", "y"]].values.tolist()
+                        for gaze_index in range(len(distances)):
+                            if distances[gaze_index][0] < distance_threshold:
+                                point_pair_list.append([filtered_reading_coordinates[gaze_index], filtered_text_coordinate[indices[gaze_index][0]]])
+                                weight = filtered_text_data.iloc[indices[gaze_index][0]]["penalty"]
+                                weight_list.append(weight)
+                                row_label_list.append(row_index)
+                                x = filtered_text_data.iloc[indices[gaze_index][0]]["x"]
+                                y = filtered_text_data.iloc[indices[gaze_index][0]]["y"]
+                                if (x, y) in actual_text_point_dict:
+                                    actual_text_point_dict[(x, y)] += 1
+                                if (x, y) in actual_supplement_text_point_dict:
+                                    actual_supplement_text_point_dict[(x, y)] += 1
+            t2 = time.time()
+            print("time: ", t2 - t1)
+
+            fig = plt.figure(figsize=(24, 12))
+            ax = fig.add_subplot(111)
+            ax.set_xlim(0, 1920)
+            ax.set_ylim(800, 0)
+            ax.set_aspect("equal")
+            color_list = [(1, 0, 0), (0, 1, 0), (0.5, 0.5, 1), (1, 0.5, 0.5), (0.5, 1, 0.5), (0.5, 0, 0.5), (0.5, 0.5, 0.5)]
+            ax.scatter(np.array(point_pair_list)[:, 0, 0], np.array(point_pair_list)[:, 0, 1], c=[color_list[i] for i in row_label_list], marker='o', s=1, zorder=1)
+            ax.scatter(np.array(point_pair_list)[:, 1, 0], np.array(point_pair_list)[:, 1, 1], c=[color_list[i] for i in row_label_list], marker='x', s=10, zorder=1)
+            line_segment_list = []
+            for point_pair_index in range(len(point_pair_list)):
+                line_segment_list.append([point_pair_list[point_pair_index][0], point_pair_list[point_pair_index][1]])
+            line_collection = LineCollection(line_segment_list, colors='b', linewidths=0.5, zorder=0)
+            ax.add_collection(line_collection)
+            plt.show()
+
+            transform_matrix, gd_error = GradientDescent.gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pair_list, weight_list, max_iterations=1000)
+
+            gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list, \
+                avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list, \
+                calibration_point_list_modified = ManualCalibrateForStd.apply_transform_to_calibration(subject_index, calibration_data, total_transform_matrix)
+
+            fig = plt.figure(figsize=(24, 12))
+            ax = fig.add_subplot(111)
+            ax.set_xlim(0, 1920)
+            ax.set_ylim(800, 0)
+            ax.set_aspect("equal")
+
+            # 将移动前的gaze_point用橙色标记。
+            ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='orange', marker='o', s=1, zorder=1)
+
+            # update gaze_point_list_1d
+            gaze_point_list_1d = [UtilFunctions.change_2d_vector_to_homogeneous_vector(gaze_point) for gaze_point in gaze_point_list_1d]
+            gaze_point_list_1d = [np.dot(transform_matrix, gaze_point) for gaze_point in gaze_point_list_1d]
+            gaze_point_list_1d = np.array([UtilFunctions.change_homogeneous_vector_to_2d_vector(gaze_point) for gaze_point in gaze_point_list_1d])
+            # update reading_data
+            for text_index in range(len(reading_data)):
+                gaze_coordinates = reading_data[text_index][["gaze_x", "gaze_y"]].values.tolist()
+                gaze_coordinates = [UtilFunctions.change_2d_vector_to_homogeneous_vector(gaze_coordinate) for gaze_coordinate in gaze_coordinates]
+                gaze_coordinates = [np.dot(transform_matrix, gaze_coordinate) for gaze_coordinate in gaze_coordinates]
+                gaze_coordinates = [UtilFunctions.change_homogeneous_vector_to_2d_vector(gaze_coordinate) for gaze_coordinate in gaze_coordinates]
+                reading_data[text_index][["gaze_x", "gaze_y"]] = gaze_coordinates
+
+            # update total_transform_matrix
+            total_transform_matrix = np.dot(transform_matrix, total_transform_matrix)
+
+            # 将移动后的gaze_point用绿色标记。
+            ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='g', marker='o', s=1, zorder=1)
+
+            # TODO 这里先简单写一个看效果的demo，之后再将函数做合适的封装处理。
+            distance_list, avg_distance = ManualCalibrateForStd.compute_distance_between_std_and_correction(avg_gaze_coordinate_after_translation_list, calibration_point_list_modified)
+            avg_error_list.append(avg_distance)
+            print("average distance: ", avg_distance)
+
+            max_pair_num = max(actual_text_point_dict.values())
+            for key, value in actual_text_point_dict.items():
+                color_ratio = 0.8 - (value / max_pair_num) * 0.6
+                color = (color_ratio, color_ratio, color_ratio)
+                if value == 0:
+                    ax.scatter(key[0], key[1], c=color, marker='x', s=40, zorder=2)
+                else:
+                    ax.scatter(key[0], key[1], c=color, marker='o', s=40, zorder=2)
+
+            max_pair_num = max(actual_supplement_text_point_dict.values())
+            for key, value in actual_supplement_text_point_dict.items():
+                color_ratio = 0.8 - (value / max_pair_num) * 0.6
+                color = (1, color_ratio, color_ratio)
+                if value == 0:
+                    ax.scatter(key[0], key[1], c=color, marker='x', s=10, zorder=3)
+                else:
+                    ax.scatter(key[0], key[1], c=color, marker='o', s=10, zorder=3)
+
+            line_segment_list = []
+            for point_pair_index in range(len(point_pair_list)):
+                # point_pair_gaze = UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair_list[point_pair_index][0])
+                # point_pair_gaze = np.dot(transform_matrix, point_pair_gaze)
+                # point_pair_gaze = UtilFunctions.change_homogeneous_vector_to_2d_vector(point_pair_gaze)
+                point_pair_gaze = point_pair_list[point_pair_index][0]
+                line_segment_list.append([point_pair_gaze, point_pair_list[point_pair_index][1]])
+            line_collection = LineCollection(line_segment_list, colors='b', linewidths=0.5, zorder=0)
+            ax.add_collection(line_collection)
+
+            plt.show()
+
+            Render.visualize_cali_result(gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list,
+                                         avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list,
+                                         calibration_point_list_modified)
+
+    # log_file = open(f"log/gradient_descent_avg_error/subject_{subject_index}.txt", "w")
+
+    # for iteration_index in range(len(avg_error_list)):
+    #     print("avg_error_list[", iteration_index, "]: ", avg_error_list[iteration_index])
+    #     log_file.write(f"avg_error_list[{iteration_index}]: {avg_error_list[iteration_index]}\n")
+    #
+    # log_file.close()
+
+    return avg_error_list
+
+
+def calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data, text_data, calibration_data, max_iteration=100, distance_threshold=32, mode="location"):
     avg_error_list = []
     if mode == "location":
         avg_error_list = calibrate_with_location(subject_index, reading_data, text_data, calibration_data, max_iteration=max_iteration, distance_threshold=distance_threshold)
@@ -454,6 +780,8 @@ def calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_
         avg_error_list = calibrate_with_location_and_coverage(subject_index, reading_data, text_data, calibration_data, max_iteration=max_iteration, distance_threshold=distance_threshold)
     elif mode == "location_coverage_and_penalty":
         avg_error_list = calibrate_with_location_coverage_and_penalty(subject_index, reading_data, text_data, calibration_data, max_iteration=max_iteration, distance_threshold=distance_threshold)
+    elif mode == "location_coverage_penalty_and_rowlabel":
+        avg_error_list = calibrate_with_location_coverage_penalty_and_rowlabel(subject_index, reading_data, text_data, calibration_data, max_iteration=max_iteration, distance_threshold=distance_threshold)
 
     return avg_error_list
 
