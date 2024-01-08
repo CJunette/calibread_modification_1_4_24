@@ -15,7 +15,10 @@ def render_text_and_reading(text_data, reading_data):
     for index, row in text_data.iterrows():
         if row["word"] == " ":
             continue
-        ax.text(row["x"], row["y"], row["word"], fontsize=20)
+        if row["word"] == "blank_supplement":
+            ax.text(row["x"], row["y"], "·", fontsize=20)
+        else:
+            ax.text(row["x"], row["y"], row["word"], fontsize=20)
 
     for index, row in reading_data.iterrows():
         x = row["gaze_x"]
@@ -86,3 +89,37 @@ def visualize_text_data(text_df, color='k', size=10):
         ax.scatter(x, y, c=color, marker='o', s=size)
 
     plt.show()
+
+
+def visualize_error_of_reading_matching(subject_index, file_prefix, ax=None):
+    file_path = f"{file_prefix}/subject_{subject_index}.txt"
+    with open(file_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+        lines = [line.strip() for line in lines]
+        lines = [line.split(",") for line in lines]
+        line_dict_list = []
+        for index, line in enumerate(lines):
+            line_avg_error = float(line[0].split(":")[1])
+            line_last_iteration = float(line[1].split(":")[1])
+            line_dict_list.append({"line_avg_error": line_avg_error, "line_last_iteration": line_last_iteration})
+
+        if not ax:
+            fig = plt.figure(figsize=(24, 12))
+            ax = fig.add_subplot(111)
+
+        ax.scatter([i for i in range(len(line_dict_list))], [line_dict["line_avg_error"] for line_dict in line_dict_list], c='g', marker='x', s=1)
+        ax.plot([i for i in range(len(line_dict_list))], [line_dict["line_avg_error"] for line_dict in line_dict_list], c='g')
+        ax_twin = ax.twinx()
+        ax_twin.scatter([i for i in range(len(line_dict_list))], [line_dict["line_last_iteration"] for line_dict in line_dict_list], c='r', marker='x', s=1)
+        ax_twin.plot([i for i in range(len(line_dict_list))], [line_dict["line_last_iteration"] for line_dict in line_dict_list], c='r')
+
+        # add text
+        for i in range(len(line_dict_list)):
+            ax.text(i, line_dict_list[i]["line_avg_error"], f"{line_dict_list[i]['line_avg_error']:.2f}", fontsize=5)
+            ax_twin.text(i, line_dict_list[i]["line_last_iteration"], f"{line_dict_list[i]['line_last_iteration']:.2f}", fontsize=5)
+
+        ax.set_xlabel("line index")
+        ax.set_ylabel("avg error (green)")
+        ax_twin.set_ylabel("last iteration (red)")
+        ax.set_title(f"subject {subject_index}")
+        plt.show()

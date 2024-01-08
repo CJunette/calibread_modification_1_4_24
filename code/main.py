@@ -32,10 +32,6 @@ if __name__ == '__main__':
     # reading_data = ClusterGaze.compress_gaze_and_cluster(reading_data)
     # SaveFiles.save_reading_data_after_modification(reading_data, "reading_after_cluster")
 
-    # # compute the text density for each subject and save it. 已保存新数据，之后直接读取，无需调用。
-    # text_density_info_list = ComputeTextDensity.compute_text_density(reading_data_after_trim, text_data, calibration_data)
-    # SaveFiles.save_text_density(text_density_info_list)
-
     # 为文本数据添加边界点，并根据边界点计算panelty。
     # 这里的数据可能会经常需要做修改（尤其是penalty）。所以虽然保存了，但也可能需要反复调用。
     text_data = ReadData.read_text_data("text_sorted_mapping.csv")
@@ -49,14 +45,19 @@ if __name__ == '__main__':
     # text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
     reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
 
+    # # 计算每个text单元的text density. 已保存新数据，之后直接读取，无需调用。
+    # text_density_info_list = ComputeTextDensity.compute_text_density(reading_data_after_trim, text_data, calibration_data)
+    # SaveFiles.save_text_density(text_density_info_list)
+
     # 确认相同label的gaze data在y方向上的分布。
     # UtilFunctions.check_y_distribution_of_data_given_row_label(reading_data)
 
     # # visualize the reading data and text.
     # for subject_index in range(0, 19):
-    #     for text_index in range(40):
-    #         Render.render_text_and_reading(text_data[text_index], reading_data[subject_index][text_index])
-    #         Render.render_text_and_reading(text_data[text_index], reading_data_after_restore[subject_index][text_index])
+    #     for text_index in range(0, 40):
+    #         print(text_index)
+    #         # Render.render_text_and_reading(text_data[text_index], reading_data[subject_index][text_index])
+    #         Render.render_text_and_reading(text_data[text_index], reading_data_after_trim[subject_index][text_index])
 
     # # visualize manual calibration data with icp
     # icp_avg_distance_list = UtilFunctions.visualize_manual_calibration(ManualCalibrateForStd.compute_std_cali_with_icp)
@@ -88,4 +89,9 @@ if __name__ == '__main__':
     #     avg_error_list.append(avg_errors[:5])
     # for subject_index in range(len(avg_error_list)):
     #     print(avg_error_list[subject_index])
+
+    # 可视化基于文本对齐的log数据。
+    # for subject_index in range(0, 19):
+    #     Render.visualize_error_of_reading_matching(subject_index, "log/2024.1.8_with_punctuation/gradient_descent_avg_error")
+
 

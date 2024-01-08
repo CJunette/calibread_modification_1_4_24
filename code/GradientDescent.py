@@ -196,7 +196,7 @@ def gradient_descent_with_whole_matrix_using_tensor(point_pairs,
                                      [matrix_20, matrix_21, matrix_22]], dtype=torch.float32, requires_grad=True).cuda(0)
 
     for i in range(max_iterations):
-        transform_matrix.retain_grad() # 保证transform_matrix的梯度能够一直被保留。
+        transform_matrix.retain_grad()  # 保证transform_matrix的梯度能够一直被保留。
         source_points_after_transform = torch.matmul(transform_matrix, source_points.transpose(0, 1)).transpose(0, 1)
         error = torch.mean(torch.square(source_points_after_transform - target_points))
         error.backward()
@@ -220,10 +220,10 @@ def gradient_descent_with_whole_matrix_using_tensor(point_pairs,
     return transform_matrix
 
 
-def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, weight,
+def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, weight, last_iteration_num,
                                                                 learning_rate_00=1e-7, learning_rate_01=1e-7, learning_rate_02=1,
                                                                 learning_rate_10=1e-7, learning_rate_11=1e-7, learning_rate_12=1,
-                                                                learning_rate_20=1e-7, learning_rate_21=1e-7, learning_rate_22=1e-7, max_iterations=1000):
+                                                                learning_rate_20=1e-7, learning_rate_21=1e-7, learning_rate_22=1e-6, max_iterations=2000):
     '''
     与之前gradient_descent_with_whole_matrix()相比，这里的差别在于使用了tensor加速，且用的是tensor自己的反向传播及求导。
     :param weight: 根据文本点的特征和对应注视点的特征，设计的权重向量。
@@ -240,6 +240,20 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
     :param max_iterations:
     :return:
     '''
+    stop_accuracy = 0.01
+
+    if 10 < last_iteration_num < 100:
+        learning_rate_00 *= 1
+        learning_rate_01 *= 1
+        learning_rate_02 *= 1
+        learning_rate_10 *= 1
+        learning_rate_11 *= 1
+        learning_rate_12 *= 1
+        learning_rate_20 *= 1
+        learning_rate_21 *= 1
+        learning_rate_22 *= 1
+        stop_accuracy *= 10
+
     source_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[0]) for point_pair in point_pairs])
     target_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[1]) for point_pair in point_pairs])
     source_points = torch.tensor(source_points, dtype=torch.float32, requires_grad=False).cuda(0)
@@ -261,16 +275,37 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
                                      [matrix_10, matrix_11, matrix_12],
                                      [matrix_20, matrix_21, matrix_22]], dtype=torch.float32, requires_grad=True).cuda(0)
     last_error = 1000000
+    last_iteration_num = 0
     for i in range(max_iterations):
-        transform_matrix.retain_grad() # 保证transform_matrix的梯度能够一直被保留。
+        transform_matrix.retain_grad()  # 保证transform_matrix的梯度能够一直被保留。
         source_points_after_transform = torch.matmul(transform_matrix, source_points.transpose(0, 1)).transpose(0, 1)
         square = torch.square(source_points_after_transform - target_points)
         square_with_weight = square * weight_tensor
         error = torch.mean(square_with_weight)
         error.backward()
-        # print(transform_matrix.grad)
+        # print(f"grad length: {torch.norm(transform_matrix.grad)}")
 
-        with torch.no_grad():
+        with (torch.no_grad()):
+            # if i < 50 and \
+            #     abs(transform_matrix.grad[0][0]) < 1e3 and \
+            #     abs(transform_matrix.grad[0][1]) < 1e3 and \
+            #     abs(transform_matrix.grad[0][2]) < 1e-1 and \
+            #     abs(transform_matrix.grad[1][0]) < 1e3 and \
+            #     abs(transform_matrix.grad[1][1]) < 1e3 and \
+            #     abs(transform_matrix.grad[1][2]) < 1e-1 and \
+            #     abs(transform_matrix.grad[2][0]) < 1e-1 and \
+            #     abs(transform_matrix.grad[2][1]) < 1e-1 and \
+            #     abs(transform_matrix.grad[2][2]) < 1e-3:
+            #     learning_rate_00 *= 100
+            #     learning_rate_01 *= 100
+            #     learning_rate_02 *= 100
+            #     learning_rate_10 *= 100
+            #     learning_rate_11 *= 100
+            #     learning_rate_12 *= 100
+            #     learning_rate_20 *= 100
+            #     learning_rate_21 *= 100
+            #     learning_rate_22 *= 100
+
             transform_matrix[0][0] -= learning_rate_00 * transform_matrix.grad[0][0]
             transform_matrix[0][1] -= learning_rate_01 * transform_matrix.grad[0][1]
             transform_matrix[0][2] -= learning_rate_02 * transform_matrix.grad[0][2]
@@ -281,15 +316,14 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
             transform_matrix[2][1] -= learning_rate_21 * transform_matrix.grad[2][1]
             transform_matrix[2][2] -= learning_rate_22 * transform_matrix.grad[2][2]
 
+        # print(transform_matrix.grad, f"iteration: {i}, error: {error}")
         transform_matrix.grad.zero_()
         print(f"iteration: {i}, error: {error}")
-
-        if last_error - error < .01:
+        last_iteration_num = i
+        if abs(last_error - error) < stop_accuracy:
             break
         else:
             last_error = error
 
     transform_matrix = transform_matrix.cpu().detach().numpy()
-    return transform_matrix, last_error
-
-
+    return transform_matrix, last_error, last_iteration_num

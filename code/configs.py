@@ -5,8 +5,9 @@ number_of_process = 8
 punctuation_list = {'\'', '\"', '!', '?', '.', '/', '\\', '-', '，', ':', '：', '。', '……', '！', '？', '——', '（', '）', '【', '】', '“', '”', '’', '‘', '：', '；', '《', '》', '、', '—', '～', '·', '「', '」', '『', '』'}
 
 location_penalty = 1
-punctuation_penalty = -0.001
+punctuation_penalty = 1
 empty_penalty = -0.001
+completion_weight = 0.1
 
 row_num = 6
 col_num = 30

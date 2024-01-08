@@ -10,6 +10,7 @@ def save_text_density(text_density_info_list):
     subject_name_list = os.listdir(gaze_data_file_path)
 
     for subject_index in range(len(text_density_info_list)):
+        print(subject_index)
         file_path = f"text_density/{configs.round_num}/tobii/{subject_name_list[subject_index]}"
         if not os.path.exists(file_path):
             os.makedirs(file_path)

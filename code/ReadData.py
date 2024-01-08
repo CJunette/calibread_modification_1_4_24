@@ -19,7 +19,13 @@ def read_gaze_data(data_type, reading_type) -> list:
             file_path = f"{subject_path}/{reading_name}"
             pd_reading_file = pd.read_csv(file_path)
             reading_file_list.append(pd_reading_file)
-        subject_list.append(reading_file_list)
+        matrix_x_list = [int(reading_file_list[i]["matrix_x"].tolist()[0]) for i in range(len(reading_file_list))]
+        sorted_reading_file_list = [None for _ in range(len(reading_file_list))]
+        for i in range(len(reading_file_list)):
+            matrix_x = matrix_x_list[i]
+            sorted_reading_file_list[matrix_x] = reading_file_list[i]
+
+        subject_list.append(sorted_reading_file_list)
 
     return subject_list
 
