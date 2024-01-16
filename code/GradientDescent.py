@@ -2,6 +2,7 @@ import numpy as np
 import torch
 
 import UtilFunctions
+import configs
 
 
 def compute_partial_derivative_of_matrix(matrix, source_points, target_points):
@@ -240,9 +241,9 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
     :param max_iterations:
     :return:
     '''
-    stop_accuracy = 0.01
+    stop_accuracy = configs.gradient_descent_stop_accuracy
 
-    if 10 < last_iteration_num < 100:
+    if 10 < last_iteration_num < 200:
         learning_rate_00 *= 1
         learning_rate_01 *= 1
         learning_rate_02 *= 1
@@ -327,3 +328,166 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
 
     transform_matrix = transform_matrix.cpu().detach().numpy()
     return transform_matrix, last_error, last_iteration_num
+
+
+def gradient_descent_with_torch(point_pairs, weight, last_iteration_num, learning_rate=2e-1, max_iterations=2000, stop_grad_norm=5):
+    torch.manual_seed(configs.random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    source_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[0]) for point_pair in point_pairs])
+    target_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[1]) for point_pair in point_pairs])
+    source_points = torch.tensor(source_points, dtype=torch.float32, requires_grad=False).cuda(0)
+    target_points = torch.tensor(target_points, dtype=torch.float32, requires_grad=False).cuda(0)
+
+    weight_tensor = torch.tensor(weight, dtype=torch.float32, requires_grad=False).unsqueeze(-1).cuda(0)
+
+    matrix_00 = 1 + 1e-5
+    matrix_01 = 1e-5
+    matrix_02 = 1e-5
+    matrix_10 = 1e-5
+    matrix_11 = 1 + 1e-5
+    matrix_12 = 1e-5
+    matrix_20 = 1e-5
+    matrix_21 = 1e-5
+    matrix_22 = 1 + 1e-5
+
+    transform_matrix = torch.tensor([[matrix_00, matrix_01, matrix_02],
+                                     [matrix_10, matrix_11, matrix_12],
+                                     [matrix_20, matrix_21, matrix_22]], dtype=torch.float32, requires_grad=True).cuda(0)
+    transform_matrix = torch.nn.Parameter(transform_matrix)  # 将transform_matrix转换为一个可以优化的参数
+
+    optimizer = torch.optim.Adam([transform_matrix], lr=learning_rate)
+    last_error = 1000000
+    grad_norm_list = []
+    square_scale_tensor = torch.tensor([1, 1, 1e4], dtype=torch.float32, requires_grad=False).cuda(0)
+
+    for iteration_index in range(max_iterations):
+        optimizer.zero_grad()
+        source_points_after_transform = torch.matmul(transform_matrix, source_points.transpose(0, 1)).transpose(0, 1)
+        square = torch.square(source_points_after_transform - target_points)
+        square = square * square_scale_tensor
+        square_with_weight = square * weight_tensor
+        error = torch.mean(square_with_weight)
+        error.backward()
+        optimizer.step()
+
+        # print(f"iteration: {iteration_index}, error: {error}, grad_norm: {torch.norm(transform_matrix.grad)}")
+        last_iteration_num = iteration_index
+        last_error = error
+        grad_norm_list.append(torch.norm(transform_matrix.grad))
+        bool_stop = True
+        for grad_norm in grad_norm_list[-50:]:
+            if grad_norm > stop_grad_norm:
+                bool_stop = False
+                break
+
+        if last_iteration_num > 1000 and bool_stop:
+            last_error = error
+            break
+        else:
+            last_error = error
+
+    transform_matrix = transform_matrix.cpu().detach().numpy()
+    return transform_matrix, last_error, last_iteration_num
+
+
+def gradient_descent_with_torch_and_batch(point_pairs, weight, last_iteration_num, learning_rate=1e-2, max_iterations=2000):
+    torch.manual_seed(configs.random_seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+    source_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[0]) for point_pair in point_pairs])
+    target_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[1]) for point_pair in point_pairs])
+    # target_points = np.array([point_pair[1] for point_pair in point_pairs])
+    source_points = torch.tensor(source_points, dtype=torch.float32, requires_grad=False).cuda(0)
+    target_points = torch.tensor(target_points, dtype=torch.float32, requires_grad=False).cuda(0)
+
+    weight_tensor = torch.tensor(weight, dtype=torch.float32, requires_grad=False).unsqueeze(-1).cuda(0)
+
+    matrix_00 = 1 + 1e-5
+    matrix_01 = 1e-5
+    matrix_02 = 1e-5
+    matrix_10 = 1e-5
+    matrix_11 = 1 + 1e-5
+    matrix_12 = 1e-5
+    matrix_20 = 1e-5
+    matrix_21 = 1e-5
+    matrix_22 = 1 + 1e-5
+
+    transform_matrix = torch.tensor([[matrix_00, matrix_01, matrix_02],
+                                     [matrix_10, matrix_11, matrix_12],
+                                     [matrix_20, matrix_21, matrix_22]], dtype=torch.float32, requires_grad=True).cuda(0)
+    transform_matrix = torch.nn.Parameter(transform_matrix)  # 将transform_matrix转换为一个可以优化的参数
+
+    optimizer = torch.optim.Adam([transform_matrix], lr=learning_rate)
+    last_error = 1000000
+    grad_norm_list = []
+
+    batch_groups = 4
+    batch_size = int(np.ceil(len(source_points) / batch_groups))
+
+    batch_source_points = []
+    batch_target_points = []
+    batch_weight_tensor = []
+    for batch_index in range(batch_groups):
+        start_index = batch_index * batch_size
+        end_index = min((batch_index + 1) * batch_size, len(source_points))
+        batch_source_points.append(source_points[start_index:end_index])
+        batch_target_points.append(target_points[start_index:end_index])
+        batch_weight_tensor.append(weight_tensor[start_index:end_index])
+
+    square_scale_tensor = torch.tensor([1, 1, 1e4], dtype=torch.float32, requires_grad=False).cuda(0)
+    minimal_error_transform_matrix = None
+    minimal_error = 1000000
+    minimal_error_iteration = 0
+    for iteration_index in range(max_iterations):
+        error_list = []
+        for batch_index in range(batch_groups):
+            start_index = batch_index * batch_size
+            end_index = min((batch_index + 1) * batch_size, len(source_points))
+
+            optimizer.zero_grad()
+            batch_source_points_after_transform = torch.matmul(transform_matrix, batch_source_points[batch_index].transpose(0, 1)).transpose(0, 1)
+            square = torch.square(batch_source_points_after_transform - batch_target_points[batch_index])
+            square = square * square_scale_tensor
+            square_with_weight = square * batch_weight_tensor[batch_index]
+            error = torch.mean(square_with_weight)
+            error_list.append(error.cpu().detach().numpy() * (end_index - start_index))
+            error.backward()
+            optimizer.step()
+
+        if np.sum(error_list)/len(point_pairs) < minimal_error:
+            minimal_error = np.sum(error_list)/len(point_pairs)
+            minimal_error_transform_matrix = transform_matrix.cpu().detach().numpy()
+            minimal_error_iteration = iteration_index
+
+        print(f"iteration: {iteration_index}, error: {np.sum(error_list)/len(point_pairs)}, grad_norm: {torch.norm(transform_matrix.grad)}")
+        # if iteration_index > 4:
+        #     print(f"iteration: {iteration_index}, error: {np.sum(error_list)/len(point_pairs)}, transform_matrix: {transform_matrix}")
+        #     if transform_matrix[2][0] > 1e-3:
+        #         print()
+
+        last_iteration_num = iteration_index
+        grad_norm_list.append(torch.norm(transform_matrix.grad))
+
+        # 如果500个iteration内都没有更新最小error，就停止。
+        if minimal_error_iteration > iteration_index + 500:
+            break
+
+        # bool_stop = True
+        # for grad_norm in grad_norm_list[-50:]:
+        #     if grad_norm > stop_grad_norm:
+        #         bool_stop = False
+        #         break
+        #
+        # if last_iteration_num > 1000 and bool_stop:
+        #     last_error = np.sum(error_list)/len(point_pairs)
+        #     break
+        # else:
+        #     last_error = np.sum(error_list)/len(point_pairs)
+
+    # transform_matrix = transform_matrix.cpu().detach().numpy()
+    return minimal_error_transform_matrix, last_error, last_iteration_num
+
+

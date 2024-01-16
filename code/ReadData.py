@@ -100,3 +100,24 @@ def read_calibration_data() -> list:
     return subject_list
 
 
+def read_density():
+    data_path_prefix = f"text_density/{configs.round_num}/tobii"
+    subject_list = os.listdir(data_path_prefix)
+
+    subject_density_list = []
+    for subject_index in range(len(subject_list)):
+        file_path = f"{data_path_prefix}/{subject_list[subject_index]}/text_density.csv"
+        pd_density = pd.read_csv(file_path)
+
+        text_index_list = pd_density["para_id"].unique().tolist()
+        text_index_list.sort()
+        text_density_list = []
+        for text_index in range(len(text_index_list)):
+            text_density_df = pd_density[pd_density["para_id"] == text_index]
+            text_density_list.append(text_density_df)
+
+        subject_density_list.append(text_density_list)
+
+    return subject_density_list
+
+

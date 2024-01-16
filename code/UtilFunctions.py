@@ -251,7 +251,7 @@ def add_boundary_points_to_text_data(text_data):
             new_points = []
 
             left_right_padding = 3
-            up_down_padding = 3
+            up_down_padding = 1
 
             # 如果某一行内本身就存在一些空白点，则将其添加进去。如果没有空白点，则添加首尾的边界点。
             min_col = min(col_list)
