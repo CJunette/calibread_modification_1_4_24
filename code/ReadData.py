@@ -121,3 +121,27 @@ def read_density():
     return subject_density_list
 
 
+def read_tokens(mode="fine"):
+    file_path = f"text/{configs.round_num}/tokens/{mode}_tokens"
+    file_list = os.listdir(file_path)
+    file_list.sort(key=lambda x: int(x.split(".")[0]))
+    token_data = []
+    for text_index in range(len(file_list)):
+        file_name = f"{file_path}/{file_list[text_index]}"
+        df = pd.read_csv(file_name)
+        token_data.append(df)
+    return token_data
+
+
+def read_token_embedding(mode="fine"):
+    file_path = f"text/{configs.round_num}/embeddings_for_{mode}_tokens"
+    file_list = os.listdir(file_path)
+    file_list.sort(key=lambda x: int(x.split(".")[0]))
+    token_embedding_data = []
+    for text_index in range(len(file_list)):
+        file_name = f"{file_path}/{file_list[text_index]}"
+        df = pd.read_csv(file_name)
+        token_embedding_data.append(df)
+    return token_embedding_data
+
+

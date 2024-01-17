@@ -41,10 +41,14 @@ if __name__ == '__main__':
     # SplitText.save_text_data_after_splitting()
     # # 对于split得到的unique sentence，逐一获取它们的embedding。
     # Embeddings.save_embedding_for_unique_sentence()
+    # # 获取text中分词的embedding。
+    # Embeddings.save_embedding_for_tokens()
     # # 根据embedding来进行聚类。
     # Embeddings.cluster_word_given_embedding()
-    # 根据embedding来生成简单的神经网络。
+    # # 根据embedding来生成简单的神经网络。
     Embeddings.linear_neural_network()
+    # # 对神经网络给出的结果进行更简单的可视化。
+    # Embeddings.visualize_linear_neural_network_prediction()
 
     # 为文本数据添加边界点，并根据边界点计算panelty。
     # 这里的数据可能会经常需要做修改（尤其是penalty）。所以虽然保存了，但也可能需要反复调用。

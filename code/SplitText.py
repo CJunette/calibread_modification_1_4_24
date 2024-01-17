@@ -14,13 +14,13 @@ def check_split_given_word(word):
 def split_text_with_punctuation():
     text_data = ReadData.read_text_data("text_sorted_mapping.csv")
     unique_sentence_df_list_1 = []
-    for text_index in range(len(text_data)):
+    for text_index in range(0, len(text_data)):
         text_df = text_data[text_index]
         rows = text_df["row"].unique().tolist()
         rows.sort()
         new_row_df_list = []
         unique_sentence_df_list_2 = []
-        for row_index in range(len(rows)):
+        for row_index in range(0, len(rows)):
             row = rows[row_index]
             row_df = text_df[text_df["row"] == row].reset_index(drop=True)
 
@@ -33,7 +33,8 @@ def split_text_with_punctuation():
                 if (not check_split_given_word(row_df.iloc[word_index]["word"])) and word_index < row_df.shape[0] - 1:
                     word_index += 1
                 else:
-                    if sentence_start_index == word_index and word_index < row_df.shape[0] - 1:
+                    # if sentence_start_index == word_index and word_index < row_df.shape[0] - 1:
+                    if sentence_start_index == word_index and check_split_given_word(row_df.iloc[word_index]["word"]):
                         sentence_start_index += 1
                         word_index += 1
                         sentence_list.append("/split")
@@ -43,6 +44,7 @@ def split_text_with_punctuation():
                         if sentence_start_index > 0:
                             start_index -= 1
                         end_index = word_index
+                        last_word = row_df.iloc[end_index]["word"]
                         word_list = row_df.iloc[start_index: end_index + 1]["word"].tolist()
 
                         end_col = row_df.iloc[word_index]["col"]
@@ -54,11 +56,14 @@ def split_text_with_punctuation():
                         else:
                             sentence = "".join(word_list)
 
-                        if word_index == row_df.shape[0] - 1:
+                        if word_index == row_df.shape[0] - 1 and not check_split_given_word(last_word):
                             end_index += 1
                         for index in range(sentence_start_index, end_index):
                             sentence_list.append(sentence)
                             word_index_in_sentence.append(index - sentence_start_index)
+                        if word_index == row_df.shape[0] - 1 and check_split_given_word(last_word):
+                            sentence_list.append("/split")
+                            word_index_in_sentence.append(-1)
                         unique_sentence_list.append(sentence)
                         if word_index == row_df.shape[0] - 1:
                             break
