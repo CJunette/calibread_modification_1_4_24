@@ -15,7 +15,7 @@ import UtilFunctions
 
 if __name__ == '__main__':
     # reading_data = ReadData.read_gaze_data("original", "reading")
-    # calibration_data = ReadData.read_calibration_data()
+    calibration_data = ReadData.read_calibration_data()
     # Render.render_cali_points_and_avg_gaze(calibration_data)
 
     # # add density for each reading_data. 已保存新数据（这里的保存是和trim一起完成的，没有单独写），之后直接读取，无需调用。
@@ -45,23 +45,35 @@ if __name__ == '__main__':
     # Embeddings.save_embedding_for_tokens()
     # # 根据embedding来进行聚类。
     # Embeddings.cluster_word_given_embedding()
+    # # 对已有的embedding，重新保存text_sorted_mapping。
+    # Embeddings.save_text_for_model()
     # # 根据embedding来生成简单的神经网络。
-    Embeddings.linear_neural_network()
+    # Embeddings.linear_neural_network("")
     # # 对神经网络给出的结果进行更简单的可视化。
-    # Embeddings.visualize_linear_neural_network_prediction()
+    # Embeddings.visualize_linear_neural_network_prediction("010")
+    # # 将神经网络生成的结果与被试原始的注视时间结果进行可视化。
+    # Embeddings.visualize_gaze_density_of_model("008")
+
+    # # 将simple linear model的预测结果作为权重，放到text data中。
+    # text_data = ReadData.read_text_data("text_sorted_mapping.csv")
+    # text_data = Embeddings.add_model_prediction_to_text_data(text_data)
+    # # 将加入权重后的text_data进行保存。
+    # SaveFiles.save_text_data_after_add_prediction(text_data)
 
     # 为文本数据添加边界点，并根据边界点计算panelty。
     # 这里的数据可能会经常需要做修改（尤其是penalty）。所以虽然保存了，但也可能需要反复调用。
     # text_data = ReadData.read_text_data("text_sorted_mapping.csv")
+    text_data = ReadData.read_text_data("text_sorted_mapping_with_prediction.csv")
     # add boundary points to text data.
-    # text_data = UtilFunctions.add_boundary_points_to_text_data(text_data)
+    text_data = UtilFunctions.add_boundary_points_to_text_data(text_data)
     # add penalty to text_data。
-    # text_data = AddWeight.add_weight_to_text(text_data)
+    text_data = AddWeight.add_weight_to_text(text_data)
     # save text_data after adding boundary and penalty.
     # SaveFiles.save_text_data_after_adding_boundary_and_penalty(text_data)
 
     # text_data = ReadData.read_text_data("text_sorted_mapping_with_boundary_and_penalty.csv")
-    # reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
+    # text_data = ReadData.read_text_data("text_sorted_mapping_with_prediction.csv")
+    reading_data = ReadData.read_gaze_data("original", "reading_after_cluster")
 
     # # 计算每个text单元的text density. 已保存新数据，之后直接读取，无需调用。
     # text_density_info_list = ComputeTextDensity.compute_text_density(reading_data_after_trim, text_data, calibration_data)
@@ -98,14 +110,15 @@ if __name__ == '__main__':
     # UtilFunctions.compute_error_for_seven_points_homography()
 
     # 对reading数据，使用梯度下降实现对齐。
-    # avg_error_list = []
-    # for subject_index in range(0, 19):
-    #     print(subject_index)
-    #     # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
-    #     # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")
-    #     # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_and_penalty")
-    #     # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_penalty_and_rowlabel")
-    #     avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="torch")
+    avg_error_list = []
+    for subject_index in range(0, 2):
+        print(subject_index)
+        # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
+        # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")
+        # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_and_penalty")
+        # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_penalty_and_rowlabel")
+        # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="torch")
+        avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="simple_linear_weight")
     #     avg_errors.sort()
     #     print(avg_errors[:5])
     #     avg_error_list.append(avg_errors[:5])

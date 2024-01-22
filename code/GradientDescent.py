@@ -330,7 +330,7 @@ def gradient_descent_with_whole_matrix_using_tensor_with_weight(point_pairs, wei
     return transform_matrix, last_error, last_iteration_num
 
 
-def gradient_descent_with_torch(point_pairs, weight, last_iteration_num, learning_rate=2e-1, max_iterations=2000, stop_grad_norm=5):
+def gradient_descent_with_torch(point_pairs, weight, last_iteration_num, learning_rate=2e-1, max_iterations=2000, stop_grad_norm=5, grad_clip_value=0):
     torch.manual_seed(configs.random_seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -339,6 +339,7 @@ def gradient_descent_with_torch(point_pairs, weight, last_iteration_num, learnin
     target_points = np.array([UtilFunctions.change_2d_vector_to_homogeneous_vector(point_pair[1]) for point_pair in point_pairs])
     source_points = torch.tensor(source_points, dtype=torch.float32, requires_grad=False).cuda(0)
     target_points = torch.tensor(target_points, dtype=torch.float32, requires_grad=False).cuda(0)
+    # target_points = target_points[:, :2] / target_points[:, 2:]
 
     weight_tensor = torch.tensor(weight, dtype=torch.float32, requires_grad=False).unsqueeze(-1).cuda(0)
 
@@ -360,33 +361,48 @@ def gradient_descent_with_torch(point_pairs, weight, last_iteration_num, learnin
     optimizer = torch.optim.Adam([transform_matrix], lr=learning_rate)
     last_error = 1000000
     grad_norm_list = []
-    square_scale_tensor = torch.tensor([1, 1, 1e4], dtype=torch.float32, requires_grad=False).cuda(0)
+    grad_norm_derivative_list = [0]
+    square_scale_tensor = torch.tensor([1, 1, 1e5], dtype=torch.float32, requires_grad=False).cuda(0)
 
     for iteration_index in range(max_iterations):
         optimizer.zero_grad()
-        source_points_after_transform = torch.matmul(transform_matrix, source_points.transpose(0, 1)).transpose(0, 1)
-        square = torch.square(source_points_after_transform - target_points)
-        square = square * square_scale_tensor
-        square_with_weight = square * weight_tensor
-        error = torch.mean(square_with_weight)
+        transformed_points = torch.matmul(transform_matrix, source_points.transpose(0, 1)).transpose(0, 1)
+        # source_points_after_transform = source_points_after_transform[:, :2] / source_points_after_transform[:, 2:]
+        # square = square * square_scale_tensor
+        # error = torch.mean(torch.square(transformed_points - target_points) * weight_tensor)
+        distance = transformed_points[:, :2] - target_points[:, :2]
+        error = torch.mean(torch.square(distance) * weight_tensor)
+        # penalty = torch.sum((transformed_points[:, 2] - target_points[:, 2]) ** 2) * 100
+        # error += penalty
         error.backward()
+        if grad_clip_value > 0:
+            torch.nn.utils.clip_grad_norm_(transform_matrix, grad_clip_value)
         optimizer.step()
 
-        # print(f"iteration: {iteration_index}, error: {error}, grad_norm: {torch.norm(transform_matrix.grad)}")
+        print(f"iteration: {iteration_index}, error: {error}, grad_norm: {torch.norm(transform_matrix.grad)}")
         last_iteration_num = iteration_index
         last_error = error
-        grad_norm_list.append(torch.norm(transform_matrix.grad))
-        bool_stop = True
-        for grad_norm in grad_norm_list[-50:]:
-            if grad_norm > stop_grad_norm:
-                bool_stop = False
-                break
+        if len(grad_norm_list) > 0:
+            grad_norm_derivative_list.append(torch.norm(transform_matrix.grad).cpu().detach() - grad_norm_list[-1])
+        grad_norm_list.append(torch.norm(transform_matrix.grad).cpu())
+        # bool_stop = True
+        # # 检查过去50项，保证他们都小于stop_grad_norm。
+        # for grad_norm in grad_norm_list[-50:]:
+        #     if grad_norm > stop_grad_norm:
+        #         bool_stop = False
+        #         break
 
-        if last_iteration_num > 1000 and bool_stop:
-            last_error = error
-            break
-        else:
-            last_error = error
+        # if torch.norm(transform_matrix.grad) > 999:
+        #     for grad_norm_derivative in grad_norm_derivative_list[-50:]:
+        #         if abs(grad_norm_derivative) > stop_grad_norm:
+        #             bool_stop = False
+        #             break
+
+        # if last_iteration_num > 1000 and bool_stop:
+        #     last_error = error
+        #     break
+        # else:
+        #     last_error = error
 
     transform_matrix = transform_matrix.cpu().detach().numpy()
     return transform_matrix, last_error, last_iteration_num
@@ -491,3 +507,70 @@ def gradient_descent_with_torch_and_batch(point_pairs, weight, last_iteration_nu
     return minimal_error_transform_matrix, last_error, last_iteration_num
 
 
+# def gradient_descent_with_2d_vector(point_pairs, weight, last_iteration_num, learning_rate=2e-1, max_iterations=2000, stop_grad_norm=5, grad_clip_value=0):
+#     torch.manual_seed(configs.random_seed)
+#     torch.backends.cudnn.deterministic = True
+#     torch.backends.cudnn.benchmark = False
+#
+#     source_points = np.array([point_pair[0] for point_pair in point_pairs])
+#     target_points = np.array([point_pair[1] for point_pair in point_pairs])
+#     source_points = torch.tensor(source_points, dtype=torch.float32, requires_grad=False)
+#     target_points = torch.tensor(target_points, dtype=torch.float32, requires_grad=False)
+#
+#     weight_tensor = torch.tensor(weight, dtype=torch.float32, requires_grad=False).unsqueeze(-1)
+#
+#     transform_vector = torch.nn.Parameter(torch.tensor([1e-5, 1e-5], requires_grad=True))
+#     rotate_rad = torch.nn.Parameter(torch.tensor(1e-5, requires_grad=True))
+#     scale_x = torch.nn.Parameter(torch.tensor(1 + 1e-5, requires_grad=True))
+#     scale_y = torch.nn.Parameter(torch.tensor(1 + 1e-5, requires_grad=True))
+#     shear_x = torch.nn.Parameter(torch.tensor(1e-5, requires_grad=True))
+#     shear_y = torch.nn.Parameter(torch.tensor(1e-5, requires_grad=True))
+#
+#     rotate_matrix = torch.tensor([[torch.cos(rotate_rad), -torch.sin(rotate_rad)],
+#                                   [torch.sin(rotate_rad), torch.cos(rotate_rad)]], requires_grad=True)
+#     scale_matrix = torch.tensor([[scale_x, 0],
+#                                  [0, scale_y]], requires_grad=True)
+#     shear_matrix = torch.tensor([[1, shear_x],
+#                                  [shear_y, 1]], requires_grad=True)
+#
+#     optimizer = torch.optim.Adam([transform_vector, rotate_rad, scale_x, scale_y, shear_x, shear_y], lr=learning_rate)
+#     last_error = 1000000
+#     grad_norm_list = []
+#     grad_norm_derivative_list = [0]
+#     square_scale_tensor = torch.tensor([1, 1, 1e5], dtype=torch.float32, requires_grad=False).cuda(0)
+#
+#     for iteration_index in range(max_iterations):
+#         optimizer.zero_grad()
+#         transformed_points = source_points + transform_vector
+#         transformed_points = torch.matmul(rotate_matrix, transformed_points.transpose(0, 1)).transpose(0, 1)
+#         transformed_points = torch.matmul(scale_matrix, transformed_points.transpose(0, 1)).transpose(0, 1)
+#         transformed_points = torch.matmul(shear_matrix, transformed_points.transpose(0, 1)).transpose(0, 1)
+#         error = torch.mean(torch.square(transformed_points - target_points) * weight_tensor)
+#
+#         error.backward()
+#         rotate_matrix.backward()
+#         # if grad_clip_value > 0:
+#         #     torch.nn.utils.clip_grad_norm_([transform_vector, rotate_rad, scale_x, scale_y, shear_x, shear_y], grad_clip_value)
+#         optimizer.step()
+#
+#         print(f"iteration: {iteration_index}, error: {error}, grad_norm: {torch.norm(transform_vector.grad)}, {torch.norm(rotate_rad.grad)}, {torch.norm(scale_x.grad)}, {torch.norm(scale_y.grad)}, {torch.norm(shear_x.grad)}, {torch.norm(shear_y.grad)}")
+#         last_iteration_num = iteration_index
+#         last_error = error
+#
+#     transform_matrix = torch.matmul(torch.tensor([[torch.cos(rotate_rad), -torch.sin(rotate_rad), 0],
+#                                                   [torch.sin(rotate_rad), torch.cos(rotate_rad), 0],
+#                                                   [0, 0, 1]]),
+#                                     torch.tensor([[1, 0, transform_vector[0]],
+#                                                   [0, 1, transform_vector[1]],
+#                                                   [0, 0, 1]]))
+#
+#     transform_matrix = torch.matmul(torch.tensor([[scale_x, 0, 0],
+#                                                   [0, scale_y, 0],
+#                                                   [0, 0, 1]]),
+#                                     transform_matrix)
+#     transform_matrix = torch.matmul(torch.tensor([[1, shear_x, 0],
+#                                                   [shear_y, 1, 0],
+#                                                   [0, 0, 1]]),
+#                                     transform_matrix)
+#
+#     return transform_matrix, last_error, last_iteration_num

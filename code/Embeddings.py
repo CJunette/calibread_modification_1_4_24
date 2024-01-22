@@ -1,4 +1,5 @@
 import ast
+import math
 import multiprocessing
 import os.path
 import time
@@ -67,9 +68,8 @@ def save_embedding_for_unique_sentence():
         os.makedirs(save_path_prefix)
 
     unique_sentence_data = ReadData.read_text_data("unique_sentence.csv")
-    unique_sentence_data_with_embedding = []
 
-    for text_index in range(19, len(unique_sentence_data)):
+    for text_index in range(0, len(unique_sentence_data)):
         print(f"processing text {text_index}")
         unique_sentence_df = unique_sentence_data[text_index]
         embedding_list = []
@@ -134,9 +134,9 @@ def save_embedding_for_tokens(mode="fine"):
         df = token_df[["tokens", "text_unit_component", "row", "split"]].copy()
         df["embedding"] = embedding_list
         # change the column name "text_unit_component" to "col".
-        df.rename(columns={"text_unit_component": "col"}, inplace=True)
-        df["col"] = df["col"].apply(eval).apply(lambda x: x[0])
-        df["row"] = df["row"].apply(eval).apply(lambda x: x[0])
+        # df.rename(columns={"text_unit_component": "col"}, inplace=True)
+        # df["col"] = df["col"].apply(eval).apply(lambda x: x[0])
+        # df["row"] = df["row"].apply(eval).apply(lambda x: x[0])
 
         file_name = f"{save_file_path}/{text_index}.csv"
         df.to_csv(file_name, index=False, encoding="utf-8-sig")
@@ -172,23 +172,21 @@ def get_density_single_pool(density_data, subject_index, text_index, row_index, 
     return subject_index, text_index, row_index, col_index, density, relative_density
 
 
-def get_density_and_embedding_location_vector(bool_token_embedding=True):
+def save_text_for_model(bool_token_embedding=True):
     sentence_embedding_data = ReadData.read_text_data("unique_sentence_with_embedding.csv")
     text_data = ReadData.read_text_data("text_sorted_mapping_with_split.csv")
-    print()
-
     token_embedding_data = ReadData.read_token_embedding()
 
-    # 获取每个word对应的density。
-    density_data = ReadData.read_density()
-
     for text_index in range(len(text_data)):
+        print(f"processing embedding of text {text_index}")
         text_df = text_data[text_index]
         sentence_embedding_df = sentence_embedding_data[text_index]
         text_df["sentence_embedding"] = None
+        text_df["row_length"] = 0
         if bool_token_embedding:
             text_df["token_embedding"] = None
             text_df["col_within_token"] = -1
+            text_df["token_length"] = 0
 
         for text_unit_index in range(sentence_embedding_df.shape[0]):
             sentence = sentence_embedding_df.iloc[text_unit_index]["sentence"]
@@ -196,18 +194,25 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
             embedding = ast.literal_eval(embedding)
             for index, series in text_df.loc[text_df["sentence"] == sentence].iterrows():
                 text_df.at[index, "sentence_embedding"] = embedding
+
+        row_list = text_df["row"].unique().tolist()
+        row_list.sort()
+        for row_index in range(len(row_list)):
+            row_df = text_df[text_df["row"] == row_list[row_index]]
+            row_length = row_df.shape[0]
+            text_df.loc[text_df["row"] == row_list[row_index], "row_length"] = row_length
+
         if bool_token_embedding:
             for token_index in range(token_embedding_data[text_index].shape[0]):
-                token = token_embedding_data[text_index].iloc[token_index]["tokens"]
-                # 确认当前的token都是有意义的内容，在将其embedding加入到text_df中。
-                bool_break = True
-                for token_unit in token:
-                    if not (token_unit.strip() == "" or token_unit in configs.punctuation_list):
-                        bool_break = False
-                        break
-                if bool_break:
-                    continue
-
+                # # 确认当前的token都是有意义的内容，在将其embedding加入到text_df中。
+                # token = token_embedding_data[text_index].iloc[token_index]["tokens"]
+                # bool_break = True
+                # for token_unit in token:
+                #     if not (token_unit.strip() == "" or token_unit in configs.punctuation_list):
+                #         bool_break = False
+                #         break
+                # if bool_break:
+                #     continue
                 embedding = token_embedding_data[text_index].iloc[token_index]["embedding"]
                 embedding = ast.literal_eval(embedding)
                 row = int(token_embedding_data[text_index].iloc[token_index]["row"])
@@ -217,21 +222,110 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
                     index = text_df.loc[(text_df["row"] == row) & (text_df["col"] == col[col_index]), "token_embedding"].index.tolist()[0]
                     text_df.at[index, "token_embedding"] = embedding
                     text_df.at[index, "col_within_token"] = col_index
+                    text_df.at[index, "token_length"] = len(col)
+    save_prefix = f"text/{configs.round_num}"
+    if not os.path.exists(save_prefix):
+        os.makedirs(save_prefix)
+    df = pd.concat(text_data, ignore_index=True).reset_index(drop=True)
+    file_name = f"{save_prefix}/text_sorted_mapping_for_model.pkl"
+    # df.to_csv(file_name, index=False, encoding="utf-8-sig")
+    df.to_pickle(file_name)
+
+
+def get_density_and_embedding_location_vector(bool_token_embedding=True):
+    # sentence_embedding_data = ReadData.read_text_data("unique_sentence_with_embedding.csv")
+    # text_data = ReadData.read_text_data("text_sorted_mapping_with_split.csv")
+    # print()
+    #
+    # token_embedding_data = ReadData.read_token_embedding()
+
+    text_data = ReadData.read_text_pickle_data("text_sorted_mapping_for_model.pkl")
+
+    # 获取每个word对应的density。
+    density_data = ReadData.read_density()
+
+    # for text_index in range(len(text_data)):
+    #     print(f"processing embedding of text {text_index}")
+    #     text_df = text_data[text_index]
+    #     sentence_embedding_df = sentence_embedding_data[text_index]
+    #     text_df["sentence_embedding"] = None
+    #     text_df["row_length"] = 0
+    #     if bool_token_embedding:
+    #         text_df["token_embedding"] = None
+    #         text_df["col_within_token"] = -1
+    #         text_df["token_length"] = 0
+    #
+    #     for text_unit_index in range(sentence_embedding_df.shape[0]):
+    #         sentence = sentence_embedding_df.iloc[text_unit_index]["sentence"]
+    #         embedding = sentence_embedding_df.iloc[text_unit_index]["embedding"]
+    #         embedding = ast.literal_eval(embedding)
+    #         for index, series in text_df.loc[text_df["sentence"] == sentence].iterrows():
+    #             text_df.at[index, "sentence_embedding"] = embedding
+    #
+    #     row_list = text_df["row"].unique().tolist()
+    #     row_list.sort()
+    #     for row_index in range(len(row_list)):
+    #         row_df = text_df[text_df["row"] == row_list[row_index]]
+    #         row_length = row_df.shape[0]
+    #         text_df.loc[text_df["row"] == row_list[row_index], "row_length"] = row_length
+    #
+    #     if bool_token_embedding:
+    #         for token_index in range(token_embedding_data[text_index].shape[0]):
+    #             # # 确认当前的token都是有意义的内容，在将其embedding加入到text_df中。
+    #             # token = token_embedding_data[text_index].iloc[token_index]["tokens"]
+    #             # bool_break = True
+    #             # for token_unit in token:
+    #             #     if not (token_unit.strip() == "" or token_unit in configs.punctuation_list):
+    #             #         bool_break = False
+    #             #         break
+    #             # if bool_break:
+    #             #     continue
+    #             embedding = token_embedding_data[text_index].iloc[token_index]["embedding"]
+    #             embedding = ast.literal_eval(embedding)
+    #             row = int(token_embedding_data[text_index].iloc[token_index]["row"])
+    #             col = token_embedding_data[text_index].iloc[token_index]["col"]
+    #             col = ast.literal_eval(col)
+    #             for col_index in range(len(col)):
+    #                 index = text_df.loc[(text_df["row"] == row) & (text_df["col"] == col[col_index]), "token_embedding"].index.tolist()[0]
+    #                 text_df.at[index, "token_embedding"] = embedding
+    #                 text_df.at[index, "col_within_token"] = col_index
+    #                 text_df.at[index, "token_length"] = len(col)
 
     vector_list = []
     for text_index in range(len(text_data)):
+        print(f"processing vector of text {text_index}")
         text_df = text_data[text_index]
-        text_df = text_df[text_df["sentence"] != "/split"]
+        # text_df = text_df[text_df["sentence"] != "/split"]
         row_list = text_df["row"].tolist()
         col_list = text_df["col"].tolist()
+
         word_index_in_sentence_list = text_df["word_index_in_sentence"].tolist()
+        sentence_length_list = text_df["sentence_length"].tolist()
+        # word_relative_index_in_sentence_list = [] # word_relative_index用来表示该文字在这个sentence中的相对位置，对于非split对象，其值在0到1之间；对于split对象，其值在-1到0之间。
+        # for word_unit_index in range(len(word_index_in_sentence_list)):
+        #     length = sentence_length_list[word_unit_index]
+        #     if length > 1:
+        #         length -= 1
+        #     word_index = word_index_in_sentence_list[word_unit_index]
+        #     if word_index < 0:
+        #         relative_word_index = (word_index + 1) / length + 1e-5
+        #     else:
+        #         relative_word_index = word_index / length + 1e-5
+        #     word_relative_index_in_sentence_list.append(relative_word_index)
+
+        row_length_list = text_df["row_length"].tolist()
+
         sentence_embedding_list = text_df["sentence_embedding"].tolist()
-        sentence_embedding_list = [np.array([word_index_in_sentence_list[i]] + sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+        sentence_embedding_list = [np.array([row_list[i]] + [col_list[i]] + [row_length_list[i]] +
+                                            [word_index_in_sentence_list[i]] + [sentence_length_list[i]] +
+                                            sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+
         text_index_list = [text_index for _ in range(len(row_list))]
         if bool_token_embedding:
             token_embedding_list = text_df["token_embedding"].tolist()
             col_within_token_list = text_df["col_within_token"].tolist()
-            token_embedding_list = [np.array([col_list[i]] + [col_within_token_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
+            token_length_list = text_df["token_length"].tolist()
+            token_embedding_list = [np.array([col_within_token_list[i]] + [token_length_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list, token_embedding_list))
         else:
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list))
@@ -243,6 +337,7 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
     for subject_index in range(len(density_data)):
         density_list_1 = []
         for text_index in range(len(density_data[subject_index])):
+            print(f"processing density of subject {subject_index}, text {text_index}")
             density_df = density_data[subject_index][text_index].copy()
             density_df = density_df[density_df["word"] != "blank_supplement"]
             text_df = text_data[text_index]
@@ -316,12 +411,12 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
     # density_list = density_list.reshape((len(density_data), len(vector_list), -1))
     # print("density_list finished")
 
-    return vector_list, density_list, sentence_embedding_data, text_data, density_data
+    return vector_list, density_list, text_data, density_data
 
 
 def cluster_word_given_embedding():
     text_index_list = [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15]
-    vector_list, density_list, embedding_data, text_data, density_data = get_density_and_embedding_location_vector(False)
+    vector_list, density_list, text_data, density_data = get_density_and_embedding_location_vector(False)
 
     print("tsne start")
     vector_only = np.vstack(vector_list[:, 3])
@@ -393,7 +488,7 @@ def linear_regression():
     :return:
     '''
     text_index_list = [0, 1, 2, 3, 4, 10, 11, 12, 13, 14, 15]
-    vector_list, density_list, embedding_data, text_data, density_data = get_density_and_embedding_location_vector(False)
+    vector_list, density_list, text_data, density_data = get_density_and_embedding_location_vector(False)
 
     X = [vector_list[i][3] for i in range(len(vector_list)) if vector_list[i][0] in text_index_list]
     X = X * len(density_data)
@@ -454,16 +549,75 @@ class SimpleNet(nn.Module):
         return out
 
 
-def train(model, X, y, optimizer, criterion, epochs):
+def train_model(model, X, y, optimizer, criterion, epochs):
+    # 转换数据为PyTorch tensors
+    X_tensor = torch.tensor(X, dtype=torch.float32).to('cuda')
+    y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1).to('cuda')
+
     model.train()
     for epoch in range(epochs):
         optimizer.zero_grad()
-        outputs = model(X)
-        loss = criterion(outputs, y)
+        outputs = model(X_tensor)
+        loss = criterion(outputs, y_tensor)
         loss.backward()
         optimizer.step()
         if (epoch+1) % 10 == 0:
             print(f'Epoch {epoch+1}/{epochs}, Loss: {loss.item()}')
+
+
+def evaluate_model(model, X, y, criterion):
+    X_tensor = torch.tensor(X, dtype=torch.float32).to('cuda')
+    y_tensor = torch.tensor(y, dtype=torch.float32).view(-1, 1).to('cuda')
+    model.eval()
+    with torch.no_grad():
+        y_pred = model(X_tensor)
+        loss = criterion(y_pred, y_tensor)
+        print(f'Validation loss: {loss.item()}')
+
+    return y_pred
+
+
+def save_model(model, model_name=""):
+    if model_name != "":
+        model_save_prefix = f"model/simple_linear_net"
+        if not os.path.exists(model_save_prefix):
+            os.makedirs(model_save_prefix)
+        torch.save(model.state_dict(), f"{model_save_prefix}/{model_name}.pth")
+
+
+def return_model_prediction(model, X_train, X_val, X_train_info, X_val_info, text_data):
+    # get y_train_pred and y_val_pred.
+    model.eval()
+    with torch.no_grad():
+        X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to('cuda')
+        y_train_pred = model(X_train_tensor).to('cpu').numpy()
+        X_val_tensor = torch.tensor(X_val, dtype=torch.float32).to('cuda')
+        y_val_pred = model(X_val_tensor).to('cpu').numpy()
+
+    model_result = [[[-1 for _ in range(configs.col_num)] for _ in range(configs.row_num)] for _ in range(len(text_data))]
+    minimal_result = 10000
+    for index in range(len(X_train_info)):
+        text_index = X_train_info[index][0]
+        row_index = X_train_info[index][1]
+        col_index = X_train_info[index][2]
+        model_result[text_index][row_index][col_index] = y_train_pred[index][0]
+        if y_train_pred[index][0] < minimal_result:
+            minimal_result = y_train_pred[index][0]
+    for index in range(len(X_val_info)):
+        text_index = X_val_info[index][0]
+        row_index = X_val_info[index][1]
+        col_index = X_val_info[index][2]
+        model_result[text_index][row_index][col_index] = y_val_pred[index][0]
+        if y_val_pred[index][0] < minimal_result:
+            minimal_result = y_val_pred[index][0]
+
+    for text_index in range(len(model_result)):
+        for row_index in range(len(model_result[text_index])):
+            for col_index in range(len(model_result[text_index][row_index])):
+                if model_result[text_index][row_index][col_index] != -1:
+                    model_result[text_index][row_index][col_index] += abs(minimal_result)
+
+    return model_result
 
 
 def select_data_given_indices(index_list, vector_list, density_list, bool_token_embedding=True):
@@ -483,51 +637,67 @@ def select_data_given_indices(index_list, vector_list, density_list, bool_token_
         if int(density_list[0][density_index][1]) in index_list:
             density_index_list.append(density_index)
     for subject_index in range(len(density_list)):
-        density_list_1 = density_list[subject_index][density_index_list][:, 4]
+        density_list_1 = density_list[subject_index][density_index_list][:, configs.model_density_index] # 这里的4是density，5是relative_density。
         y.extend(density_list_1)
 
     return X, y, X_info
 
 
-def linear_neural_network(bool_token_embedding=True):
+def prepare_data(bool_token_embedding):
+    vector_list, density_list, text_data, density_data = get_density_and_embedding_location_vector(bool_token_embedding)
+
+    training_index_list = configs.training_index_list
+    X_train, y_train, X_train_info = select_data_given_indices(training_index_list, vector_list, density_list, bool_token_embedding)
+
+    validation_index_list = np.setdiff1d(np.array([i for i in range(40)]), np.array(training_index_list))
+    X_val, y_val, X_val_info = select_data_given_indices(validation_index_list, vector_list, density_list, bool_token_embedding)
+
+    return X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, text_data, density_data
+
+
+def create_simple_linear_model(input_size):
+    model = SimpleNet(input_size, hidden_layers_1=64, hidden_layers_2=128, hidden_layer_3=256, hidden_layer_4=512).to('cuda')
+    # 定义优化器和损失函数
+    if configs.model_density_index == 4:
+        learning_rate = 0.01
+        epoch_num = 300
+    else:
+        learning_rate = 0.005
+        epoch_num = 500
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = nn.MSELoss()
+    return model, optimizer, criterion, epoch_num
+
+
+def read_model(model, model_name):
+    model.load_state_dict(torch.load(model_name))
+    return model
+
+
+def linear_neural_network(model_name, bool_token_embedding=True):
     '''
+    包含了数据准备、训练、评估和保存模型的过程。
     :return:
     '''
     torch.manual_seed(configs.random_seed)
 
-    training_index_list = configs.training_index_list
-    vector_list, density_list, embedding_data, text_data, density_data = get_density_and_embedding_location_vector(bool_token_embedding)
-
-    X_train, y_train, X_train_info = select_data_given_indices(training_index_list, vector_list, density_list, bool_token_embedding)
-    # 转换数据为PyTorch tensors
-    X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to('cuda')
-    y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1).to('cuda')
-
-    # 定义模型
+    # 准备数据
+    X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, text_data, density_data = prepare_data(bool_token_embedding)
     input_size = X_train.shape[1]
-    if bool_token_embedding:
-        model = SimpleNet(input_size, hidden_layers_1=64, hidden_layers_2=128, hidden_layer_3=256, hidden_layer_4=512).to('cuda')
-    else:
-        model = SimpleNet(input_size, hidden_layers_1=64, hidden_layers_2=128, hidden_layer_3=256, hidden_layer_4=512).to('cuda')
 
-    # 定义优化器和损失函数
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-    criterion = nn.MSELoss()
+    # 创建模型
+    model, optimizer, criterion, epoch_num = create_simple_linear_model(input_size)
 
     # 训练模型
-    train(model, X_train_tensor, y_train_tensor, optimizer, criterion, epochs=300)
+    train_model(model, X_train, y_train, optimizer, criterion, epochs=epoch_num)
 
-    validation_index_list = np.setdiff1d(np.array([i for i in range(40)]), np.array(training_index_list))
-    X_val, y_val, X_val_info = select_data_given_indices(validation_index_list, vector_list, density_list, bool_token_embedding)
-    X_val_tensor = torch.tensor(X_val, dtype=torch.float32).to('cuda')
-    y_val_tensor = torch.tensor(y_val, dtype=torch.float32).view(-1, 1).to('cuda')
-    model.eval()
-    with torch.no_grad():
-        y_val_pred = model(X_val_tensor)
-        loss = criterion(y_val_pred, y_val_tensor)
-        print(f'Validation loss: {loss.item()}')
+    # 评估模型
+    y_pred = evaluate_model(model, X_val, y_val, criterion)
 
-    return model, training_index_list, validation_index_list, X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, embedding_data, text_data, density_data
+    # 保存模型
+    save_model(model, model_name)
+
+    return model, X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, text_data, density_data
 
 
 def visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, density_list, text_data, model_result, training_index_list, save_index_str="000"):
@@ -548,11 +718,12 @@ def visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, 
 
         end_col_index = start_col_index
         probe_index = word_index + 1
+
         while probe_index < len(vector_list):
             vector = vector_list[probe_index][3]
-            word_index_in_sentence = vector[0]
-            if word_index_in_sentence == 0:
-                end_row_index = vector_list[probe_index][1]
+            word_index_in_sentence = vector[3]
+            end_row_index = vector_list[probe_index][1]
+            if word_index_in_sentence == 0 or end_row_index != row_index:
                 if end_row_index != row_index:  # 如果结束时换行了，新的对象的col_index就会是0，这样会有问题。所以这里需要区分一下。
                     end_col_index += 1
                 else:
@@ -579,7 +750,7 @@ def visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, 
             if start_col_index > 0:  # 如果start_col_index不为0，则说明前面应该有一个\split的内容，将其密度-1添加进来。
                 density_list_2.append(-1)
             for index in range(start_word_index, probe_index):
-                density_list_2.append(density_list[subject_index][index][4])
+                density_list_2.append(density_list[subject_index][index][configs.model_density_index])
             if probe_index == len(vector_list) or vector_list[probe_index][1] == row_index:  # 如果结束的位置是同行，代表末尾还会有若干个\split，所以末尾也要加上这些-1。
                 length = len(word_list) - len(density_list_2)
                 for index in range(length):
@@ -623,7 +794,7 @@ def visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, 
         plt.close()
 
 
-def visualize_linear_neural_network_prediction_using_row_unit(vector_list, density_data, text_data, model_result, training_index_list, save_index_str="000"):
+def visualize_linear_neural_network_prediction_using_row_unit(vector_list, density_data, text_data, model_result, save_index_str="000"):
     word_index = 0
     start_word_index = 0
     picture_index = 0
@@ -633,7 +804,7 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         text_index = vector_list[word_index][0]
         row_index = vector_list[word_index][1]
 
-        if text_index in training_index_list:
+        if text_index in configs.training_index_list:
             prefix = "training"
         else:
             prefix = "validation"
@@ -655,7 +826,11 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         start_col = row_df["col"].tolist()[0]
         end_col = row_df["col"].tolist()[-1]
         for col_index in range(start_col, end_col + 1):
-            prediction_list.append(model_result[text_index][row_index][col_index])
+            prediction = model_result[text_index][row_index][col_index]
+            if configs.model_density_index == 4:
+                prediction_list.append(prediction)
+            else:
+                prediction_list.append(prediction / 20)
 
         density_list_1 = []
         for subject_index in range(len(density_data)):
@@ -666,7 +841,10 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
             #     density_list_2.append(density_list[subject_index][index][4])
             # row_df.loc[row_df["sentence"] != "/split", "density"] = density_list_2
             # density_list_2 = row_df["density"].tolist()
-            density_list_2 = density_df["text_density"].tolist()
+            if configs.model_density_index == 4:
+                density_list_2 = density_df["text_density"].tolist()
+            else:
+                density_list_2 = density_df["relative_text_density"].tolist()
             density_list_1.append(np.array(density_list_2))
         density_list_1 = np.array(density_list_1)
 
@@ -699,36 +877,112 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         plt.close()
 
 
-def visualize_linear_neural_network_prediction():
+def train_model_and_return_prediction(model_name, bool_token_embedding=True):
+    (model,
+     X_train, y_train, X_val, y_val, X_train_info, X_val_info,
+     vector_list, density_list, text_data, density_data) = linear_neural_network(model_name, bool_token_embedding=bool_token_embedding)
+
+    # get y_train_pred and y_val_pred.
+    model_result = return_model_prediction(model, X_train, X_val, X_train_info, X_val_info, text_data)
+
+    return model_result, X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, text_data, density_data
+
+
+def visualize_linear_neural_network_prediction(model_name_str=""):
     plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体为SimHei
     plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
 
-    (model, training_index_list, validation_index_list,
+    (model_result,
      X_train, y_train, X_val, y_val, X_train_info, X_val_info,
-     vector_list, density_list, embedding_data, text_data, density_data) = linear_neural_network(bool_token_embedding=True)
-
-    # get y_train_pred and y_val_pred.
-    model.eval()
-    with torch.no_grad():
-        X_train_tensor = torch.tensor(X_train, dtype=torch.float32).to('cuda')
-        y_train_pred = model(X_train_tensor).to('cpu')
-        X_val_tensor = torch.tensor(X_val, dtype=torch.float32).to('cuda')
-        y_val_pred = model(X_val_tensor).to('cpu')
-
-    model_result = [[[-1 for _ in range(configs.col_num)] for _ in range(configs.row_num)] for _ in range(len(text_data))]
-    for index in range(len(X_train_info)):
-        text_index = X_train_info[index][0]
-        row_index = X_train_info[index][1]
-        col_index = X_train_info[index][2]
-        model_result[text_index][row_index][col_index] = y_train_pred[index]
-    for index in range(len(X_val_info)):
-        text_index = X_val_info[index][0]
-        row_index = X_val_info[index][1]
-        col_index = X_val_info[index][2]
-        model_result[text_index][row_index][col_index] = y_val_pred[index]
+     vector_list, density_list, text_data, density_data) = train_model_and_return_prediction(model_name_str)
 
     # visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, density_list, text_data, model_result, training_index_list)
-    visualize_linear_neural_network_prediction_using_row_unit(vector_list, density_data, text_data, model_result, training_index_list, save_index_str="004")
+    visualize_linear_neural_network_prediction_using_row_unit(vector_list, density_data, text_data, model_result, save_index_str=model_name_str)
 
+
+def visualize_gaze_density_of_model(model_name_str):
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体为SimHei
+    plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
+
+    (model_result,
+     X_train, y_train, X_val, y_val, X_train_info, X_val_info,
+     vector_list, density_list, text_data, density_data) = train_model_and_return_prediction("")
+
+    # 预测结果存在负值（不包括空白位置的预留-1），所以这里要找到最小的负值，然后整体偏移。
+    density_prediction_list = []
+    negative_list = []
+    for text_index in range(len(model_result)):
+        if text_index in configs.training_index_list:
+            continue
+        for row_index in range(len(model_result[text_index])):
+            for col_index in range(len(model_result[text_index][row_index])):
+                density = model_result[text_index][row_index][col_index]
+                if density <= 0 and density != -1:
+                    negative_list.append(density)
+    min_negative = np.min(negative_list)
+    for text_index in range(len(model_result)):
+        if text_index in configs.training_index_list:
+            continue
+        for row_index in range(len(model_result[text_index])):
+            for col_index in range(len(model_result[text_index][row_index])):
+                density = model_result[text_index][row_index][col_index]
+                if density != -1:
+                    density += abs(min_negative)
+                    density_prediction_list.append(math.pow(density, 1.4))
+
+    save_prefix = f"pic/gaze_density_of_simple_model/{model_name_str}"
+    if not os.path.exists(save_prefix):
+        os.makedirs(save_prefix)
+
+    for subject_index in range(len(density_data)):
+        density_truth_list = []
+        for text_index in range(len(text_data)):
+            if text_index in configs.training_index_list:
+                continue
+            density_df = density_data[subject_index][text_index]
+            density_df = density_df[density_df["word"] != "blank_supplement"]
+            density_truth_list.extend(density_df["text_density"].tolist())
+
+        fig = plt.figure(figsize=(16, 12))
+        ax = fig.add_subplot(111)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 1400)
+        ax.hist(density_truth_list, bins=1000, range=(0, 1000), color=(0.2, 0.2, 0.8), alpha=0.5, label="ground truth")
+        ax.hist(density_prediction_list, bins=1000, range=(0, 1000), color=(0.8, 0.2, 0.2), alpha=0.5, label="prediction")
+        ax.set_xlabel("gaze density")
+        ax.set_ylabel("count")
+        plt.legend()
+        plt.title(f"subject {subject_index}")
+        plt.savefig(f"{save_prefix}/subject_{subject_index}.png")
+        plt.clf()
+        plt.close()
+
+
+def add_model_prediction_to_text_data(text_data_raw):
+    torch.manual_seed(configs.random_seed)
+
+    # 准备数据
+    X_train, y_train, X_val, y_val, X_train_info, X_val_info, vector_list, density_list, text_data, density_data = prepare_data(bool_token_embedding=True)
+    input_size = X_train.shape[1]
+
+    # 创建模型
+    model, optimizer, criterion, epoch_num = create_simple_linear_model(input_size)
+
+    # 读取模型
+    model = read_model(model, "model/simple_linear_net/009.pth")
+
+    # 获取model对于每个word的预测值。
+    model_result = return_model_prediction(model, X_train, X_val, X_train_info, X_val_info, text_data)
+
+    for text_index in range(len(text_data_raw)):
+        prediction_list = []
+        for index in range(text_data_raw[text_index].shape[0]):
+            row_index = text_data_raw[text_index].iloc[index]["row"]
+            col_index = text_data_raw[text_index].iloc[index]["col"]
+            prediction = model_result[text_index][row_index][col_index]
+            prediction_list.append(prediction)
+        text_data_raw[text_index]["prediction"] = prediction_list
+
+    return text_data_raw
 
 

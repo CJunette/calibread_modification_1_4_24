@@ -45,6 +45,21 @@ def read_text_data(file_name) -> list:
     return pd_text_file_list
 
 
+def read_text_pickle_data(file_name) -> list:
+    data_path_prefix = f"text/{configs.round_num}/{file_name}"
+    pd_text_file = pd.read_pickle(data_path_prefix)
+    if "Unnamed: 0" in pd_text_file.columns:
+        pd_text_file.drop(columns=["Unnamed: 0"], inplace=True)
+    # divide pd_text_file according to its para_id
+    para_id_list = pd_text_file["para_id"].unique()
+    para_id_list.sort()
+    pd_text_file_list = []
+    for para_id in para_id_list:
+        pd_text_file_list.append(pd_text_file[pd_text_file["para_id"] == para_id])
+
+    return pd_text_file_list
+
+
 def read_calibration_data() -> list:
     '''
 
@@ -130,6 +145,10 @@ def read_tokens(mode="fine"):
         file_name = f"{file_path}/{file_list[text_index]}"
         df = pd.read_csv(file_name)
         token_data.append(df)
+        # change the column name "text_unit_component" to "col".
+        df.rename(columns={"text_unit_component": "col"}, inplace=True)
+        df["col"] = df["col"].apply(eval).apply(lambda x: x[0])
+        df["row"] = df["row"].apply(eval).apply(lambda x: x[0])
     return token_data
 
 

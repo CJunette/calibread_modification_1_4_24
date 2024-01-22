@@ -38,3 +38,9 @@ def save_text_data_after_adding_boundary_and_penalty(text_data):
     df.to_csv(file_path_prefix, index=False, encoding="utf-8-sig")
 
 
+def save_text_data_after_add_prediction(text_data):
+    file_path_prefix = f"text/{configs.round_num}/text_sorted_mapping_with_prediction.csv"
+    df = pd.concat(text_data, ignore_index=True)
+    df.to_csv(file_path_prefix, index=False, encoding="utf-8-sig")
+
+
