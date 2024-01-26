@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -134,4 +135,77 @@ def apply_transform_to_calibration(subject_index, calibration_data, transform_ma
            calibration_point_list_modified
 
 
+def get_affine_transform_matrix_gradient_descent(point_pair_list):
+    weight_list = [1 for _ in range(len(point_pair_list))]
+    transform_matrix, _, _, _ = GradientDescent.gradient_descent_with_torch(point_pair_list, weight_list, last_iteration_num=1000, learning_rate=1e-1)
+    # transform_matrix = GradientDescent.gradient_descent_with_whole_matrix_using_tensor(point_pair_list)
+
+    return transform_matrix
+
+
+def compute_std_cali_with_affine_matrix_for_all(calibration_data):
+    avg_error_list = []
+    print("all point avg_distance: ")
+    for subject_index in range(len(calibration_data)):
+        avg_gaze_list = calibration_data[subject_index][1]
+        calibration_point_list = calibration_data[subject_index][2]
+
+        point_pairs = UtilFunctions.get_paired_points_of_std_cali_from_cali_dict(avg_gaze_list, calibration_point_list)
+        # 使用梯度下降算法求解仿射变换矩阵。
+        # transform_matrix = get_affine_transform_matrix_gradient_descent(point_pairs)
+
+        # 使用cv2求解仿射变换矩阵。
+        source_points = point_pairs[:, 0, :]
+        target_points = point_pairs[:, 1, :]
+        source_points = source_points.astype(np.float32)
+        target_points = target_points.astype(np.float32)
+        transform_matrix, _ = cv2.estimateAffine2D(source_points, target_points)
+        transform_matrix = np.vstack((transform_matrix, np.array([0, 0, 1])))
+
+        gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list, \
+            avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list, \
+            calibration_point_list_modified = apply_transform_to_calibration(subject_index, calibration_data, transform_matrix)
+
+        distance_list, avg_distance = compute_distance_between_std_and_correction(avg_gaze_coordinate_after_translation_list, calibration_point_list_modified)
+        print(avg_distance)
+        avg_error_list.append(avg_distance)
+    return avg_error_list
+
+
+def compute_std_cali_with_affine_matrix_for_7_points(calibration_data):
+    avg_error_list = []
+    print("7 point avg_distance: ")
+    for subject_index in range(len(calibration_data)):
+        calibration_gaze_list = calibration_data[subject_index][0]
+        calibration_avg_list = calibration_data[subject_index][1]
+        calibration_point_list = calibration_data[subject_index][2]
+
+        calibration_avg_list = [[calibration_avg_list[0][0], calibration_avg_list[0][14], calibration_avg_list[0][29]],
+                                [calibration_avg_list[2][15]],
+                                [calibration_avg_list[5][0], calibration_avg_list[5][14], calibration_avg_list[5][29]]]
+        calibration_point_list = [[calibration_point_list[0][0], calibration_point_list[0][14], calibration_point_list[0][29]],
+                                  [calibration_point_list[2][15]],
+                                  [calibration_point_list[5][0], calibration_point_list[5][14], calibration_point_list[5][29]]]
+
+        point_pairs = UtilFunctions.get_paired_points_of_std_cali_from_cali_dict(calibration_avg_list, calibration_point_list)
+
+        # 使用梯度下降算法求解仿射变换矩阵。
+        # transform_matrix = get_affine_transform_matrix_gradient_descent(point_pairs)
+
+        # 使用cv2求解仿射变换矩阵。
+        source_points = point_pairs[:, 0, :]
+        target_points = point_pairs[:, 1, :]
+        source_points = source_points.astype(np.float32)
+        target_points = target_points.astype(np.float32)
+        transform_matrix, _ = cv2.estimateAffine2D(source_points, target_points)
+        transform_matrix = np.vstack((transform_matrix, np.array([0, 0, 1])))
+
+        gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list, \
+            avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list, \
+            calibration_point_list_modified = apply_transform_to_calibration(subject_index, calibration_data, transform_matrix)
+
+        distance_list, avg_distance = compute_distance_between_std_and_correction(avg_gaze_coordinate_after_translation_list, calibration_point_list_modified)
+        print(avg_distance)
+        avg_error_list.append(avg_distance)
+    return avg_error_list
 

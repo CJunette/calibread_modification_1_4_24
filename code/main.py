@@ -11,7 +11,7 @@ import Render
 import SaveFiles
 import SplitText
 import UtilFunctions
-
+import configs
 
 if __name__ == '__main__':
     # reading_data = ReadData.read_gaze_data("original", "reading")
@@ -109,9 +109,13 @@ if __name__ == '__main__':
     # # compute the error of 7 point homography calibration.
     # UtilFunctions.compute_error_for_seven_points_homography()
 
+    # # 查看使用affine matrix完成7点校准和所有点校准的error。
+    # ManualCalibrateForStd.compute_std_cali_with_affine_matrix_for_all(calibration_data)
+    # ManualCalibrateForStd.compute_std_cali_with_affine_matrix_for_7_points(calibration_data)
+
     # 对reading数据，使用梯度下降实现对齐。
     avg_error_list = []
-    for subject_index in range(0, 2):
+    for subject_index in range(0, 19):
         print(subject_index)
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")
@@ -119,6 +123,7 @@ if __name__ == '__main__':
         # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_coverage_penalty_and_rowlabel")
         # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="torch")
         avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="simple_linear_weight")
+        # avg_errors = CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="simple_linear_weight_ls")
     #     avg_errors.sort()
     #     print(avg_errors[:5])
     #     avg_error_list.append(avg_errors[:5])
@@ -128,5 +133,12 @@ if __name__ == '__main__':
     # 可视化基于文本对齐的log数据。
     # for subject_index in range(0, 19):
     #     Render.visualize_error_of_reading_matching(subject_index, "log/gradient_descent_avg_error")
+
+
+
+
+
+
+
 
 

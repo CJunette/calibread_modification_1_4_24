@@ -7,17 +7,17 @@
           <mappings>
             <mapping deploy="/data3-SSD-SATA-4T/lc/2023.12.28_calibread_modification/code" local="$PROJECT_DIR$" web="/" />
           </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/pic" />
-            <excludedPath local="true" path="$PROJECT_DIR$/log" />
-          </excludedPaths>
         </serverdata>
       </paths>
       <paths name="lc@101.6.41.93:22230 key (2)">
         <serverdata>
           <mappings>
-            <mapping local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/data3-SSD-SATA-4T/lc/2023.12.28_calibread_modification/code" local="$PROJECT_DIR$" web="/" />
           </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/pic" />
+            <excludedPath local="true" path="$PROJECT_DIR$/log" />
+          </excludedPaths>
         </serverdata>
       </paths>
     </serverData>
