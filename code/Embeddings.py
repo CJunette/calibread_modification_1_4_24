@@ -316,16 +316,19 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
         row_length_list = text_df["row_length"].tolist()
 
         sentence_embedding_list = text_df["sentence_embedding"].tolist()
-        sentence_embedding_list = [np.array([row_list[i]] + [col_list[i]] + [row_length_list[i]] +
-                                            [word_index_in_sentence_list[i]] + [sentence_length_list[i]] +
-                                            sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+        # sentence_embedding_list = [np.array([row_list[i]] + [col_list[i]] + [row_length_list[i]] +
+        #                                     [word_index_in_sentence_list[i]] + [sentence_length_list[i]] +
+        #                                     sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+
+        sentence_embedding_list = [np.array(sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
 
         text_index_list = [text_index for _ in range(len(row_list))]
         if bool_token_embedding:
             token_embedding_list = text_df["token_embedding"].tolist()
             col_within_token_list = text_df["col_within_token"].tolist()
             token_length_list = text_df["token_length"].tolist()
-            token_embedding_list = [np.array([col_within_token_list[i]] + [token_length_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
+            # token_embedding_list = [np.array([col_within_token_list[i]] + [token_length_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
+            token_embedding_list = [np.array(token_embedding_list[i]) for i in range(len(token_embedding_list))]
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list, token_embedding_list))
         else:
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list))
@@ -958,7 +961,7 @@ def visualize_gaze_density_of_model(model_name_str):
         plt.close()
 
 
-def add_model_prediction_to_text_data(text_data_raw):
+def add_model_prediction_to_text_data(text_data_raw, model_str="009"):
     torch.manual_seed(configs.random_seed)
 
     # 准备数据
@@ -969,7 +972,7 @@ def add_model_prediction_to_text_data(text_data_raw):
     model, optimizer, criterion, epoch_num = create_simple_linear_model(input_size)
 
     # 读取模型
-    model = read_model(model, "model/simple_linear_net/009.pth")
+    model = read_model(model, f"model/simple_linear_net/{model_str}.pth")
 
     # 获取model对于每个word的预测值。
     model_result = return_model_prediction(model, X_train, X_val, X_train_info, X_val_info, text_data)

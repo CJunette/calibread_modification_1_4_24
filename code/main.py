@@ -48,7 +48,7 @@ if __name__ == '__main__':
     # # 对已有的embedding，重新保存text_sorted_mapping。
     # Embeddings.save_text_for_model()
     # # 根据embedding来生成简单的神经网络。
-    # Embeddings.linear_neural_network("")
+    # Embeddings.linear_neural_network("019")
     # # 对神经网络给出的结果进行更简单的可视化。
     # Embeddings.visualize_linear_neural_network_prediction("010")
     # # 将神经网络生成的结果与被试原始的注视时间结果进行可视化。
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     # # 将simple linear model的预测结果作为权重，放到text data中。
     # text_data = ReadData.read_text_data("text_sorted_mapping.csv")
-    # text_data = Embeddings.add_model_prediction_to_text_data(text_data)
+    # text_data = Embeddings.add_model_prediction_to_text_data(text_data, "019")
     # # 将加入权重后的text_data进行保存。
     # SaveFiles.save_text_data_after_add_prediction(text_data)
 
@@ -114,8 +114,8 @@ if __name__ == '__main__':
     # ManualCalibrateForStd.compute_std_cali_with_affine_matrix_for_7_points(calibration_data)
 
     # 对reading数据，使用梯度下降实现对齐。
-    avg_error_list = []
-    for subject_index in range(0, 19):
+    # avg_error_list = []
+    for subject_index in range(2, 19):
         print(subject_index)
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")

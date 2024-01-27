@@ -817,6 +817,9 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
         reading_nbrs = NearestNeighbors(n_neighbors=int(len(reading_coordinates)/4), algorithm='kd_tree').fit(reading_coordinates)
         reading_nbrs_list.append(reading_nbrs)
 
+    supplement_point_pair_list = []
+    supplement_weight_list = []
+    supplement_row_label_list = []
     # 然后找出那些没有任何匹配的actual text point，将其与最近的阅读点匹配。
     total_effective_text_point_num = sum(effective_text_point_dict.values())
     point_pair_length = len(point_pair_list)
@@ -836,9 +839,22 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
             for point_index in range(closet_point_num):
                 current_point_index = indices[0][point_index]
                 gaze_point = gaze_point_list_1d[current_point_index].tolist()
-                point_pair_list.append([gaze_point, cur_text_point])
-                weight_list.append(weight)
-                row_label_list.append(-1)
+                # point_pair_list.append([gaze_point, cur_text_point])
+                # weight_list.append(weight)
+                # row_label_list.append(-1)
+                supplement_point_pair_list.append([gaze_point, cur_text_point])
+                supplement_weight_list.append(weight)
+                supplement_row_label_list.append(-1)
+
+    raw_point_pair_length = len(point_pair_list)
+
+    # 这里单独为要添加boundary的point pair生成list，方便后续筛选。
+    left_point_pair_list = []
+    right_point_pair_list = []
+    left_weight_list = []
+    right_weight_list = []
+    left_row_label_list = []
+    right_row_label_list = []
 
     # 对于最左侧的点和最右侧，都可以考虑额外添加一些匹配点对，然后添加的weight是负数。这里最左侧指的是最靠右的补充点或者空格点，最右侧指的是最靠左的不补充点。
     for text_index in range(len(text_data)):
@@ -846,22 +862,22 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
         row_list = text_df["row"].unique().tolist()
 
         for row_index in range(len(row_list)):
-            # 对于最后一行，我们为这里的blank_supplement添加匹配。
+            # 对于最后一行，我们为这里的blank_supplement添加匹配。 # 这里给最后一行添加匹配的效果不好，所以去掉了。
             if row_list[row_index] == 5.5:
-                row_df = text_df[text_df["row"] == row_list[row_index]]
-
-                for index in range(row_df.shape[0]):
-                    x = row_df.iloc[index]["x"]
-                    y = row_df.iloc[index]["y"]
-                    distances, indices = reading_nbrs_list[text_index].kneighbors([[x, y]])
-                    for point_index in range(len(indices[0])):
-                        if distances[0][point_index] < distance_threshold * configs.bottom_boundary_distance_threshold_ratio:
-                            gaze_point = reading_data[text_index].iloc[indices[0][point_index]][["gaze_x", "gaze_y"]].values.tolist()
-                            point_pair_list.append([gaze_point, [x, y]])
-                            weight_list.append(configs.empty_penalty * configs.bottom_boundary_ratio)
-                            row_label_list.append(-1)
-                        else:
-                            break
+                pass
+                # row_df = text_df[text_df["row"] == row_list[row_index]]
+                # for index in range(row_df.shape[0]):
+                #     x = row_df.iloc[index]["x"]
+                #     y = row_df.iloc[index]["y"]
+                #     distances, indices = reading_nbrs_list[text_index].kneighbors([[x, y]])
+                #     for point_index in range(len(indices[0])):
+                #         if distances[0][point_index] < distance_threshold * configs.bottom_boundary_distance_threshold_ratio:
+                #             gaze_point = reading_data[text_index].iloc[indices[0][point_index]][["gaze_x", "gaze_y"]].values.tolist()
+                #             point_pair_list.append([gaze_point, [x, y]])
+                #             weight_list.append(configs.empty_penalty * configs.bottom_boundary_ratio)
+                #             row_label_list.append(-1)
+                #         else:
+                #             break
             # 对于其它行，对左右两侧的blank_supplement添加匹配。
             else:
                 row_df = text_df[text_df["row"] == row_list[row_index]]
@@ -880,9 +896,12 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
                             for point_index in range(len(indices[0])):
                                 if distances[0][point_index] < distance_threshold * configs.left_boundary_distance_threshold_ratio:
                                     gaze_point = reading_data[text_index].iloc[indices[0][point_index]][["gaze_x", "gaze_y"]].values.tolist()
-                                    point_pair_list.append([gaze_point, [x, y]])
-                                    weight_list.append(configs.empty_penalty * configs.left_boundary_ratio)
-                                    row_label_list.append(-1)
+                                    # point_pair_list.append([gaze_point, [x, y]])
+                                    # weight_list.append(configs.empty_penalty * configs.left_boundary_ratio)
+                                    # row_label_list.append(-1)
+                                    left_point_pair_list.append([gaze_point, [x, y]])
+                                    left_weight_list.append(configs.empty_penalty * configs.left_boundary_ratio)
+                                    left_row_label_list.append(-1)
                                 else:
                                     break
                             # 确保只对最左侧的空格点添加一次匹配。
@@ -900,13 +919,43 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
                             for point_index in range(len(indices[0])):
                                 if distances[0][point_index] < distance_threshold * configs.right_boundary_distance_threshold_ratio:
                                     gaze_point = reading_data[text_index].iloc[indices[0][point_index]][["gaze_x", "gaze_y"]].values.tolist()
-                                    point_pair_list.append([gaze_point, [x, y]])
-                                    weight_list.append(configs.empty_penalty * configs.right_boundary_ratio)
-                                    row_label_list.append(-1)
+                                    # point_pair_list.append([gaze_point, [x, y]])
+                                    # weight_list.append(configs.empty_penalty * configs.right_boundary_ratio)
+                                    # row_label_list.append(-1)
+                                    right_point_pair_list.append([gaze_point, [x, y]])
+                                    right_weight_list.append(configs.empty_penalty * configs.right_boundary_ratio)
+                                    right_row_label_list.append(-1)
                                 else:
                                     break
                             # 确保只对最右侧的空格点添加一次匹配。
                             break
+
+    # 对于那些选择部分文本匹配的点，需要限制supplement point pair和raw point pair的比例，避免出现过分的失调。
+    if len(configs.training_index_list) > 16:
+        supplement_select_indices = np.random.choice(len(supplement_point_pair_list), int(len(supplement_point_pair_list) * configs.supplement_select_ratio), replace=False)
+        supplement_point_pair_list = [supplement_point_pair_list[i] for i in supplement_select_indices]
+        supplement_weight_list = [supplement_weight_list[i] for i in supplement_select_indices]
+        supplement_row_label_list = [supplement_row_label_list[i] for i in supplement_select_indices]
+    point_pair_list.extend(supplement_point_pair_list)
+    weight_list.extend(supplement_weight_list)
+    row_label_list.extend(supplement_row_label_list)
+
+    # 对于那些选择部分文本匹配的点，需要限制boundary point pair和raw point pair的比例，避免出现过分的失调。
+    if len(configs.training_index_list) > 16:
+        left_select_indices = np.random.choice(len(left_point_pair_list), int(len(left_point_pair_list) * configs.boundary_select_ratio), replace=False)
+        left_point_pair_list = [left_point_pair_list[i] for i in left_select_indices]
+        left_weight_list = [left_weight_list[i] for i in left_select_indices]
+        left_row_label_list = [left_row_label_list[i] for i in left_select_indices]
+        right_select_indices = np.random.choice(len(right_point_pair_list), int(len(right_point_pair_list) * configs.boundary_select_ratio), replace=False)
+        right_point_pair_list = [right_point_pair_list[i] for i in right_select_indices]
+        right_weight_list = [right_weight_list[i] for i in right_select_indices]
+        right_row_label_list = [right_row_label_list[i] for i in right_select_indices]
+    point_pair_list.extend(left_point_pair_list)
+    weight_list.extend(left_weight_list)
+    row_label_list.extend(left_row_label_list)
+    point_pair_list.extend(right_point_pair_list)
+    weight_list.extend(right_weight_list)
+    row_label_list.extend(right_row_label_list)
 
     return point_pair_list, weight_list, row_label_list
 
