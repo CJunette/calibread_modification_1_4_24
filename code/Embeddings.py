@@ -316,19 +316,19 @@ def get_density_and_embedding_location_vector(bool_token_embedding=True):
         row_length_list = text_df["row_length"].tolist()
 
         sentence_embedding_list = text_df["sentence_embedding"].tolist()
-        # sentence_embedding_list = [np.array([row_list[i]] + [col_list[i]] + [row_length_list[i]] +
-        #                                     [word_index_in_sentence_list[i]] + [sentence_length_list[i]] +
-        #                                     sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+        sentence_embedding_list = [np.array([row_list[i]] + [col_list[i]] + [row_length_list[i]] +
+                                            [word_index_in_sentence_list[i]] + [sentence_length_list[i]] +
+                                            sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
 
-        sentence_embedding_list = [np.array(sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
+        # sentence_embedding_list = [np.array(sentence_embedding_list[i]) for i in range(len(sentence_embedding_list))]
 
         text_index_list = [text_index for _ in range(len(row_list))]
         if bool_token_embedding:
             token_embedding_list = text_df["token_embedding"].tolist()
             col_within_token_list = text_df["col_within_token"].tolist()
             token_length_list = text_df["token_length"].tolist()
-            # token_embedding_list = [np.array([col_within_token_list[i]] + [token_length_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
-            token_embedding_list = [np.array(token_embedding_list[i]) for i in range(len(token_embedding_list))]
+            token_embedding_list = [np.array([col_within_token_list[i]] + [token_length_list[i]] + token_embedding_list[i]) for i in range(len(token_embedding_list))]
+            # token_embedding_list = [np.array(token_embedding_list[i]) for i in range(len(token_embedding_list))]
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list, token_embedding_list))
         else:
             zip_list = list(zip(text_index_list, row_list, col_list, sentence_embedding_list))
@@ -798,6 +798,9 @@ def visualize_linear_neural_network_prediction_using_sentence_unit(vector_list, 
 
 
 def visualize_linear_neural_network_prediction_using_row_unit(vector_list, density_data, text_data, model_result, save_index_str="000"):
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体为SimHei
+    plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
+
     word_index = 0
     start_word_index = 0
     picture_index = 0
@@ -854,7 +857,7 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         word_index = probe_index
         start_word_index = word_index
 
-        fig = plt.figure(figsize=(12, 8))
+        fig = plt.figure(figsize=(24, 16))
         ax = fig.add_subplot(111)
 
         index_list = [i for i in range(len(word_list))]
@@ -862,6 +865,7 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         ax.plot(index_list, prediction_list, c='r')
         for subject_index in range(len(density_list_1)):
             ax.scatter(index_list, density_list_1[subject_index], c='g', marker='x', s=10, label="ground truth")
+            # ax.scatter(index_list, density_list_1[subject_index], c='g', marker='x', s=10)
         density_list_1_mean = np.mean(density_list_1, axis=0)
         ax.plot(index_list, density_list_1_mean, c='g')
 
@@ -873,7 +877,7 @@ def visualize_linear_neural_network_prediction_using_row_unit(vector_list, densi
         plt.legend()
         ax.set_xticks(index_list)
         ax.set_xticklabels(word_list)
-        plt.title(f"{prefix} text_index: {text_index}")
+        # plt.title(f"{prefix} text_index: {text_index}")
         # plt.show()
         plt.savefig(save_name)
         plt.clf()
@@ -892,9 +896,8 @@ def train_model_and_return_prediction(model_name, bool_token_embedding=True):
 
 
 def visualize_linear_neural_network_prediction(model_name_str=""):
-    plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体为SimHei
-    plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
-
+    # plt.rcParams['font.sans-serif'] = ['SimHei']  # 指定默认字体为SimHei
+    # plt.rcParams['axes.unicode_minus'] = False  # 解决保存图像是负号'-'显示为方块的问题
     (model_result,
      X_train, y_train, X_val, y_val, X_train_info, X_val_info,
      vector_list, density_list, text_data, density_data) = train_model_and_return_prediction(model_name_str)

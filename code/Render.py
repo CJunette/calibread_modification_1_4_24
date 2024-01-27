@@ -5,12 +5,19 @@ import ManualCalibrateForStd
 import UtilFunctions
 
 
-def render_text_and_reading(text_data, reading_data):
+def render_text_and_reading(text_data, reading_data, threshold=0):
     plt.rcParams['font.sans-serif'] = ['SimHei']
-    fig = plt.figure(figsize=(20, 10))
+    fig = plt.figure(figsize=(18, 7.5))
     ax = fig.add_subplot(111)
-    ax.set_xlim(0, 1920)
-    ax.set_ylim(1080, -500)
+    ax.set_xlim(280, 1680)
+    ax.set_ylim(692, 172)
+    # 将坐标轴上的刻度隐藏
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_position([0.05, 0.05, 0.9, 0.9])
+    # 让ax的背景为透明。
+    ax.patch.set_alpha(0)
 
     # 字宽40，高64。中心点坐标为text_data["x"], text_data["y"]
     # 读取reading_data中的数据，绘制矩形框
@@ -19,14 +26,29 @@ def render_text_and_reading(text_data, reading_data):
         if row["word"] == " ":
             continue
         if row["word"] == "blank_supplement":
-            ax.text(row["x"], row["y"], "·", fontsize=20)
+            ax.text(row["x"], row["y"], "·", fontsize=25)
         else:
-            ax.text(row["x"], row["y"], row["word"], fontsize=20)
+            ax.text(row["x"], row["y"], row["word"], fontsize=25)
+
+    if threshold == 0:
+        threshold = reading_data.shape[0]
 
     for index, row in reading_data.iterrows():
+        # if index > threshold:
+        #     alpha = 0.1
+        # else:
+        #     alpha = 1 - (threshold - index) / threshold * 0.95
+        #     # alpha = 1
+
+        if 280 < index < 330:
+            alpha = 1 - (330 - index) / 75 * 0.95
+            # alpha = 1
+        else:
+            alpha = 0.05
+
         x = row["gaze_x"]
         y = row["gaze_y"]
-        ax.scatter(x, y, s=10, c="blue")
+        ax.scatter(x, y, s=20, c=[0.9, 0.5, 0.2], alpha=alpha, zorder=2)
 
     plt.show()
 

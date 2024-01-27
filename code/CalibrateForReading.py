@@ -742,6 +742,8 @@ def point_matching_3(reading_data, gaze_point_list_1d, text_data, filtered_text_
                      total_nbrs_list, row_nbrs_list,
                      effective_text_point_dict, actual_text_point_dict, actual_supplement_text_point_dict,
                      distance_threshold):
+    np.random.seed(configs.random_seed)
+
     # 首先遍历所有的reading point，找到与其label一致的text point，然后将这些匹配点加入到point_pair_list中。
     point_pair_list = []
     weight_list = []
@@ -1737,14 +1739,14 @@ def calibrate_with_simple_linear_weight(subject_index, reading_data, text_data, 
             avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list, \
             calibration_point_list_modified = ManualCalibrateForStd.apply_transform_to_calibration(subject_index, calibration_data, total_transform_matrix)
 
-        fig = plt.figure(figsize=(24, 12))
-        ax = fig.add_subplot(111)
-        ax.set_xlim(0, 1920)
-        ax.set_ylim(800, 0)
-        ax.set_aspect("equal")
-
-        # 将移动前的gaze_point用橙色标记。
-        ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='orange', marker='o', s=1, zorder=1)
+        # fig = plt.figure(figsize=(24, 12))
+        # ax = fig.add_subplot(111)
+        # ax.set_xlim(0, 1920)
+        # ax.set_ylim(800, 0)
+        # ax.set_aspect("equal")
+        #
+        # # 将移动前的gaze_point用橙色标记。
+        # ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='orange', marker='o', s=1, zorder=1)
 
         # update gaze_point_list_1d
         gaze_point_list_1d = [UtilFunctions.change_2d_vector_to_homogeneous_vector(gaze_point) for gaze_point in gaze_point_list_1d]
@@ -1758,8 +1760,8 @@ def calibrate_with_simple_linear_weight(subject_index, reading_data, text_data, 
             gaze_coordinates = [UtilFunctions.change_homogeneous_vector_to_2d_vector(gaze_coordinate) for gaze_coordinate in gaze_coordinates]
             reading_data[text_index][["gaze_x", "gaze_y"]] = gaze_coordinates
 
-        # 将移动后的gaze_point用绿色标记。
-        ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='g', marker='o', s=1, zorder=1)
+        # # 将移动后的gaze_point用绿色标记。
+        # ax.scatter(gaze_point_list_1d[:, 0], gaze_point_list_1d[:, 1], c='g', marker='o', s=1, zorder=1)
 
         # TODO 这里先简单写一个看效果的demo，之后再将函数做合适的封装处理。
         distance_list, avg_distance = ManualCalibrateForStd.compute_distance_between_std_and_correction(avg_gaze_coordinate_after_translation_list, calibration_point_list_modified)
@@ -1767,70 +1769,73 @@ def calibrate_with_simple_linear_weight(subject_index, reading_data, text_data, 
         print(f"average distance: {avg_distance}, last iteration num: {last_iteration_num}")
         last_iteration_num_list.append(last_iteration_num)
 
-        max_pair_num = max(actual_text_point_dict.values())
-        for key, value in actual_text_point_dict.items():
-            color_ratio = 0.8 - (value / max_pair_num) * 0.6
-            color = (color_ratio, color_ratio, color_ratio)
-            if value == 0:
-                ax.scatter(key[0], key[1], c=color, marker='x', s=40, zorder=2)
-            else:
-                ax.scatter(key[0], key[1], c=color, marker='o', s=40, zorder=2)
+        if avg_distance > 100000:
+            break
 
-        # max_pair_num = max(actual_supplement_text_point_dict.values())
-        # for key, value in actual_supplement_text_point_dict.items():
+        # max_pair_num = max(actual_text_point_dict.values())
+        # for key, value in actual_text_point_dict.items():
         #     color_ratio = 0.8 - (value / max_pair_num) * 0.6
-        #     color = (1, color_ratio, color_ratio)
+        #     color = (color_ratio, color_ratio, color_ratio)
         #     if value == 0:
-        #         ax.scatter(key[0], key[1], c=color, marker='x', s=10, zorder=3)
+        #         ax.scatter(key[0], key[1], c=color, marker='x', s=40, zorder=2)
         #     else:
-        #         ax.scatter(key[0], key[1], c=color, marker='o', s=10, zorder=3)
-
-        color_list = []
-        line_segment_list = []
-        weight_above_0 = weight_list.copy()
-        weight_above_0 = [weight for weight in weight_above_0 if weight > 0]
-        weight_max_above_0 = np.percentile(weight_above_0, 90)
-        weight_min_above_0 = np.percentile(weight_above_0, 10)
-        weight_difference_above_0 = weight_max_above_0 - weight_min_above_0
-        weight_below_0 = weight_list.copy()
-        weight_below_0 = [-weight for weight in weight_below_0 if weight < 0]
-        if len(weight_below_0) > 0:
-            weight_max_below_0 = np.percentile(weight_below_0, 90)
-            weight_min_below_0 = np.percentile(weight_below_0, 10)
-            weight_difference_below_0 = weight_max_below_0 - weight_min_below_0
-        for point_pair_index in range(len(point_pair_list)):
-            if weight_list[point_pair_index] > 0:
-                color_ratio = 0.5 - min(((weight_list[point_pair_index] - weight_min_above_0) / weight_difference_above_0) * 0.4, 0.4)
-                color_list.append((color_ratio, color_ratio, color_ratio + 0.5))
-            else:
-                if len(weight_below_0) > 0:
-                    color_ratio = 0.5 - min(((-weight_list[point_pair_index] - weight_min_below_0) / weight_difference_below_0) * 0.4, 0.4)
-                    color_list.append((color_ratio + 0.5, color_ratio, color_ratio))
-                else:
-                    color_list.append((1, 0, 0))
-            line_segment_list.append([point_pair_list[point_pair_index][0], point_pair_list[point_pair_index][1]])
-        line_collection = LineCollection(line_segment_list, colors=color_list, linewidths=1, zorder=3)
-        ax.add_collection(line_collection)
-
-        # plt.show()
+        #         ax.scatter(key[0], key[1], c=color, marker='o', s=40, zorder=2)
+        #
+        # # max_pair_num = max(actual_supplement_text_point_dict.values())
+        # # for key, value in actual_supplement_text_point_dict.items():
+        # #     color_ratio = 0.8 - (value / max_pair_num) * 0.6
+        # #     color = (1, color_ratio, color_ratio)
+        # #     if value == 0:
+        # #         ax.scatter(key[0], key[1], c=color, marker='x', s=10, zorder=3)
+        # #     else:
+        # #         ax.scatter(key[0], key[1], c=color, marker='o', s=10, zorder=3)
+        #
+        # color_list = []
+        # line_segment_list = []
+        # weight_above_0 = weight_list.copy()
+        # weight_above_0 = [weight for weight in weight_above_0 if weight > 0]
+        # weight_max_above_0 = np.percentile(weight_above_0, 90)
+        # weight_min_above_0 = np.percentile(weight_above_0, 10)
+        # weight_difference_above_0 = weight_max_above_0 - weight_min_above_0
+        # weight_below_0 = weight_list.copy()
+        # weight_below_0 = [-weight for weight in weight_below_0 if weight < 0]
+        # if len(weight_below_0) > 0:
+        #     weight_max_below_0 = np.percentile(weight_below_0, 90)
+        #     weight_min_below_0 = np.percentile(weight_below_0, 10)
+        #     weight_difference_below_0 = weight_max_below_0 - weight_min_below_0
+        # for point_pair_index in range(len(point_pair_list)):
+        #     if weight_list[point_pair_index] > 0:
+        #         color_ratio = 0.5 - min(((weight_list[point_pair_index] - weight_min_above_0) / weight_difference_above_0) * 0.4, 0.4)
+        #         color_list.append((color_ratio, color_ratio, color_ratio + 0.5))
+        #     else:
+        #         if len(weight_below_0) > 0:
+        #             color_ratio = 0.5 - min(((-weight_list[point_pair_index] - weight_min_below_0) / weight_difference_below_0) * 0.4, 0.4)
+        #             color_list.append((color_ratio + 0.5, color_ratio, color_ratio))
+        #         else:
+        #             color_list.append((1, 0, 0))
+        #     line_segment_list.append([point_pair_list[point_pair_index][0], point_pair_list[point_pair_index][1]])
+        # line_collection = LineCollection(line_segment_list, colors=color_list, linewidths=1, zorder=3)
+        # ax.add_collection(line_collection)
+        #
+        # # plt.show()
+        # # plt.clf()
+        # # plt.close()
+        # # Render.visualize_cali_result(gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list,
+        # #                              avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list,
+        # #                              calibration_point_list_modified, file_name=None)
+        #
+        # gaze_file_path = f"pic/reading_matching/{configs.file_index}/gaze_matching/subject_{subject_index}"
+        # if not os.path.exists(gaze_file_path):
+        #     os.makedirs(gaze_file_path)
+        # plt.savefig(f"{gaze_file_path}/iteration_{iteration_index}.png")
         # plt.clf()
         # plt.close()
+        # calibration_file_path = f"pic/reading_matching/{configs.file_index}/calibration/subject_{subject_index}"
+        # if not os.path.exists(calibration_file_path):
+        #     os.makedirs(calibration_file_path)
         # Render.visualize_cali_result(gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list,
         #                              avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list,
-        #                              calibration_point_list_modified, file_name=None)
-
-        gaze_file_path = f"pic/reading_matching/{configs.file_index}/gaze_matching/subject_{subject_index}"
-        if not os.path.exists(gaze_file_path):
-            os.makedirs(gaze_file_path)
-        plt.savefig(f"{gaze_file_path}/iteration_{iteration_index}.png")
-        plt.clf()
-        plt.close()
-        calibration_file_path = f"pic/reading_matching/{configs.file_index}/calibration/subject_{subject_index}"
-        if not os.path.exists(calibration_file_path):
-            os.makedirs(calibration_file_path)
-        Render.visualize_cali_result(gaze_coordinates_before_translation_list, gaze_coordinates_after_translation_list,
-                                     avg_gaze_coordinate_before_translation_list, avg_gaze_coordinate_after_translation_list,
-                                     calibration_point_list_modified, file_name=f"{calibration_file_path}/iteration_{iteration_index}.png")
+        #                              calibration_point_list_modified, file_name=f"{calibration_file_path}/iteration_{iteration_index}.png")
 
     log_path = f"log/{configs.file_index}/gradient_descent_avg_error"
     if not os.path.exists(log_path):

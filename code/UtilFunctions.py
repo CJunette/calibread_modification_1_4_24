@@ -160,7 +160,7 @@ def trim_data(read_gaze_data, calibration_data):
             gaze_coordinates_after_trim = []
             for gaze_coordinate_index in range(len(gaze_coordinates_after_transform)):
                 gaze_coordinate = gaze_coordinates_after_transform[gaze_coordinate_index]
-                if 340 <= gaze_coordinate[0] <= 1580 and 208 <= gaze_coordinate[1] <= 624:
+                if 340 <= gaze_coordinate[0] <= 1580 and 208 <= gaze_coordinate[1] <= 624 and gaze_coordinate[0] * (-16/236) + (239+348*16/236) < gaze_coordinate[1]:
                     keep_index_after_trim_list.append(gaze_coordinate_index)
                     gaze_coordinates_after_trim.append(gaze_coordinate)
             df_after_trim = df_after_transform.iloc[keep_index_after_trim_list]

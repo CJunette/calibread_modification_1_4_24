@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     # 对reading数据，使用梯度下降实现对齐。
     # avg_error_list = []
-    for subject_index in range(2, 19):
+    for subject_index in range(0, 19):
         print(subject_index)
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location")
         # CalibrateForReading.calibrate_reading_with_whole_matrix_gradient_descent(subject_index, reading_data[subject_index], text_data, calibration_data, mode="location_and_coverage")
